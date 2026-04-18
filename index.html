@@ -413,7 +413,9 @@ function selectTodos(v){
 }
 
 function agregarGasto(){
-  const cat=document.getElementById('selCategoria').value;
+  // Leer categoria directamente del selector en el momento del click
+  const sel=document.getElementById('selCategoria');
+  const cat=sel.options[sel.selectedIndex].value;
   const pag=document.getElementById('selPagador').value;
   const monto=parseFloat(document.getElementById('inputMonto').value);
   const nota=document.getElementById('inputNota').value.trim();
@@ -433,14 +435,15 @@ function renderGastos(){
   c.innerHTML=
     `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <span style="font-size:13px;color:#4a7a9b">Gastos registrados (${gastos.length})</span>
-      <span class="total-chip">$${fmt(total)}</span>
+      <span class="total-chip">${fmt(total)}</span>
     </div>`+
     gastos.map((g,i)=>`
-      <div class="gasto-item">
+      <div class="gasto-item" id="gastoItem_${i}">
         <div class="gasto-header">
           <span style="font-weight:700;font-size:14px">${g.cat}</span>
-          <div style="display:flex;gap:8px;align-items:center">
-            <span style="font-weight:700;color:#0c4a6e">$${fmt(g.monto)}</span>
+          <div style="display:flex;gap:6px;align-items:center">
+            <span style="font-weight:700;color:#0c4a6e">${fmt(g.monto)}</span>
+            <button class="btn btn-secondary btn-sm" onclick="editarGasto(${i})" title="Editar">&#9998;</button>
             <button class="btn btn-danger btn-sm" onclick="quitarGasto(${i})">&times;</button>
           </div>
         </div>
@@ -455,6 +458,34 @@ function renderGastos(){
     ).join('');
 }
 function quitarGasto(i){gastos.splice(i,1);renderGastos();}
+
+function editarGasto(i){
+  const g=gastos[i];
+  // Cargar valores en el formulario
+  const sel=document.getElementById('selCategoria');
+  // Si la categoria no existe en el select, agregarla temporalmente
+  if(![...sel.options].map(o=>o.value).includes(g.cat)){
+    if(!catsExtra.includes(g.cat)){catsExtra.push(g.cat);renderSelectCats();renderCatsCustom();}
+  }
+  sel.value=g.cat;
+  document.getElementById('selPagador').value=g.pag;
+  document.getElementById('inputMonto').value=g.monto;
+  document.getElementById('inputNota').value=g.nota||'';
+  // Restaurar chips de participantes
+  participantesSeleccionados=new Set(g.parts);
+  personas.forEach(p=>{
+    const el=document.getElementById('chip_'+CSS.escape(p));
+    if(el){
+      if(g.parts.includes(p)){el.classList.add('selected');}
+      else{el.classList.remove('selected');}
+    }
+  });
+  // Quitar el gasto original para reemplazarlo al agregar
+  gastos.splice(i,1);
+  renderGastos();
+  document.getElementById('inputMonto').focus();
+  document.getElementById('step2').scrollIntoView({behavior:'smooth'});
+}
 
 function fmt(n){return Math.round(n).toLocaleString('es-AR');}
 
