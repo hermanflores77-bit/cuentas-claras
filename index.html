@@ -46,21 +46,21 @@ onAuthStateChanged(auth,user=>{
 
 window.loginGoogle=async()=>{
   try{await signInWithPopup(auth,provider);}
-  catch(e){alert('Error al iniciar sesión: '+e.message);}
+  catch(e){alert('Error al iniciar sesion: '+e.message);}
 };
-window.logout=async()=>{if(confirm('¿Cerrar sesión?'))await signOut(auth);};
+window.logout=async()=>{if(confirm('Cerrar sesion?'))await signOut(auth);};
 
 window.guardarCuenta=async(data)=>{
-  if(!currentUser){alert('Debés iniciar sesión para guardar.');return;}
+  if(!currentUser){alert('Debes iniciar sesion para guardar.');return;}
   try{
     await addDoc(collection(db,'usuarios',currentUser.uid,'cuentas'),{...data,fecha:serverTimestamp()});
-    alert('¡Cuenta guardada!');
+    alert('Cuenta guardada!');
     loadHistory();
   }catch(e){alert('Error al guardar: '+e.message);}
 };
 
 window.eliminarCuenta=async(id)=>{
-  if(!confirm('¿Eliminar esta cuenta del historial?'))return;
+  if(!confirm('Eliminar esta cuenta del historial?'))return;
   try{
     await deleteDoc(doc(db,'usuarios',currentUser.uid,'cuentas',id));
     loadHistory();
@@ -73,7 +73,7 @@ async function loadHistory(){
   const q=query(ref,orderBy('fecha','desc'));
   const snap=await getDocs(q);
   const c=document.getElementById('historialLista');
-  if(snap.empty){c.innerHTML='<div class="empty-state">No hay cuentas guardadas aún</div>';return;}
+  if(snap.empty){c.innerHTML='<div class="empty-state">No hay cuentas guardadas aun</div>';return;}
   c.innerHTML='';
   snap.forEach(d=>{
     const data=d.data();
@@ -81,14 +81,14 @@ async function loadHistory(){
       ?data.fecha.toDate().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})
       :'Sin fecha';
     const total=(data.gastos||[]).reduce((s,g)=>s+g.monto,0);
-    const titulo=data.titulo||'Sin título';
+    const titulo=data.titulo||'Sin titulo';
     const el=document.createElement('div');
     el.className='hist-item';
     el.innerHTML=`
       <div class="hist-header">
         <div>
           <div class="hist-titulo">${titulo}</div>
-          <div class="hist-fecha">${fecha} · ${(data.personas||[]).join(', ')}</div>
+          <div class="hist-fecha">${fecha} &middot; ${(data.personas||[]).join(', ')}</div>
         </div>
         <span class="total-chip">$${fmt(total)}</span>
       </div>
@@ -134,7 +134,7 @@ body{font-family:system-ui,sans-serif;font-size:16px;background:#e8f4fb;color:#1
 .section-title{font-size:15px;font-weight:600;color:#0c4a6e;margin-bottom:12px;border-bottom:1px solid #d0eaf7;padding-bottom:6px}
 .step-badge{display:inline-block;background:#0c4a6e;color:#fff;border-radius:50%;width:22px;height:22px;text-align:center;line-height:22px;font-size:12px;font-weight:700;margin-right:8px}
 input[type=text],input[type=number],select,textarea{width:100%;padding:9px 11px;border:1px solid #b8d9ee;border-radius:8px;font-size:15px;outline:none;background:#fff;color:#1a1a1a;transition:border-color .2s;font-family:inherit}
-textarea{resize:vertical;min-height:60px}
+textarea{resize:vertical;min-height:48px}
 input:focus,select:focus,textarea:focus{border-color:#0c4a6e}
 .row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
 .row input[type=text]{flex:1}
@@ -143,7 +143,7 @@ input:focus,select:focus,textarea:focus{border-color:#0c4a6e}
 .btn-primary:hover{background:#0a3d5c}
 .btn-secondary{background:#e0f0f9;color:#0c4a6e;border:1px solid #b8d9ee}
 .btn-secondary:hover{background:#cde6f5}
-.btn-danger{background:#fceaea;color:#b91c1c;border:1px solid #f5c2c2;font-size:13px;padding:6px 10px}
+.btn-danger{background:#fceaea;color:#b91c1c;border:1px solid #f5c2c2}
 .btn-danger:hover{background:#f5c2c2}
 .btn-sm{padding:5px 10px;font-size:13px}
 .btn-full{width:100%}
@@ -175,7 +175,6 @@ input:focus,select:focus,textarea:focus{border-color:#0c4a6e}
 .modal-box{background:#fff;border-radius:14px;padding:20px;max-width:520px;width:100%;max-height:80vh;display:flex;flex-direction:column;gap:12px}
 .modal-title{font-size:15px;font-weight:600;color:#0c4a6e}
 .modal-body{font-size:13px;line-height:1.8;white-space:pre-wrap;overflow-y:auto;flex:1;background:#f2f9fd;border:1px solid #b8d9ee;border-radius:8px;padding:12px}
-.cat-custom-row{display:flex;gap:8px;margin-top:8px}
 .cat-chip{background:#e0f0f9;color:#0c4a6e;border-radius:16px;padding:4px 10px;font-size:13px;display:inline-flex;align-items:center;gap:5px;margin:2px}
 .cat-chip button{background:none;border:none;cursor:pointer;color:#b91c1c;font-size:13px;padding:0;line-height:1}
 .chart-wrap{position:relative;height:200px;margin-top:14px}
@@ -188,7 +187,7 @@ input:focus,select:focus,textarea:focus{border-color:#0c4a6e}
   <div class="login-card">
     <div class="login-logo">💰</div>
     <div class="login-title">Cuentas Claras</div>
-    <div class="login-sub">Dividí gastos entre amigos, familia y compañeros. Tu historial siempre disponible.</div>
+    <div class="login-sub">Dividi gastos entre amigos, familia y companeros. Tu historial siempre disponible.</div>
     <button class="btn-google" onclick="loginGoogle()">
       <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google">
       Continuar con Google
@@ -217,10 +216,9 @@ input:focus,select:focus,textarea:focus{border-color:#0c4a6e}
 
   <div id="tabNueva">
 
-    <!-- PASO 1 -->
     <div class="card" id="step1">
-      <div class="section-title"><span class="step-badge">1</span>Datos de la reunión</div>
-      <input type="text" id="inputTitulo" placeholder="Nombre de la reunión (ej: Asado del sábado)" maxlength="50" style="margin-bottom:10px"/>
+      <div class="section-title"><span class="step-badge">1</span>Datos de la reunion</div>
+      <input type="text" id="inputTitulo" placeholder="Nombre (ej: Asado del sabado, Turno Padel...)" maxlength="50" style="margin-bottom:10px"/>
       <div class="row">
         <input type="text" id="inputNombre" placeholder="Nombre de persona..." maxlength="30"/>
         <button class="btn btn-primary btn-sm" onclick="agregarPersona()">+ Agregar</button>
@@ -229,18 +227,15 @@ input:focus,select:focus,textarea:focus{border-color:#0c4a6e}
       <button class="btn btn-primary btn-full" style="margin-top:10px" onclick="pasarStep2()">Continuar &rarr;</button>
     </div>
 
-    <!-- PASO 2 -->
     <div class="card" id="step2">
       <div class="section-title"><span class="step-badge">2</span>Registro de gastos</div>
 
-      <div style="margin-bottom:8px">
-        <div style="font-size:13px;color:#4a7a9b;margin-bottom:4px">Categoría</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <select id="selCategoria" style="flex:1;min-width:140px"></select>
-          <div style="display:flex;gap:6px;flex:1;min-width:160px">
-            <input type="text" id="inputCatCustom" placeholder="Nueva categoría..." style="flex:1"/>
-            <button class="btn btn-secondary btn-sm" onclick="agregarCategoria()">+</button>
-          </div>
+      <div style="margin-bottom:10px">
+        <div style="font-size:13px;color:#4a7a9b;margin-bottom:4px">Categoria</div>
+        <select id="selCategoria" style="width:100%"></select>
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <input type="text" id="inputCatCustom" placeholder="Agregar categoria nueva..." style="flex:1"/>
+          <button class="btn btn-secondary btn-sm" onclick="agregarCategoria()">+ Agregar</button>
         </div>
         <div id="catsCustom" style="margin-top:6px"></div>
       </div>
@@ -250,12 +245,12 @@ input:focus,select:focus,textarea:focus{border-color:#0c4a6e}
         <input type="number" id="inputMonto" placeholder="Monto $" min="0" step="1" style="width:110px;flex:none"/>
       </div>
 
-      <div style="margin-bottom:8px">
-        <textarea id="inputNota" placeholder="Nota opcional (ej: 2 kg de asado, Quilmes 1L...)" style="min-height:48px;font-size:13px"></textarea>
+      <div style="margin-bottom:10px">
+        <textarea id="inputNota" placeholder="Nota opcional (ej: 2 kg vacío, Quilmes 1L...)" style="min-height:48px;font-size:13px"></textarea>
       </div>
 
-      <div style="margin-bottom:8px">
-        <div style="font-size:13px;color:#4a7a9b;margin-bottom:5px">¿Quiénes participan en este gasto?</div>
+      <div style="margin-bottom:10px">
+        <div style="font-size:13px;color:#4a7a9b;margin-bottom:5px">Quienes participan en este gasto?</div>
         <div id="chipParticipantes" class="participantes-grid"></div>
         <div style="margin-top:6px;display:flex;gap:6px">
           <button class="btn btn-secondary btn-sm" onclick="selectTodos(true)">Todos</button>
@@ -268,7 +263,6 @@ input:focus,select:focus,textarea:focus{border-color:#0c4a6e}
       <button class="btn btn-primary btn-full" style="margin-top:10px" onclick="calcular()">Calcular cuentas &rarr;</button>
     </div>
 
-    <!-- PASO 3 -->
     <div class="card" id="step3">
       <div class="section-title"><span class="step-badge">3</span>Resultado final</div>
       <div id="resultadoBalance"></div>
@@ -279,7 +273,6 @@ input:focus,select:focus,textarea:focus{border-color:#0c4a6e}
       <div class="chart-wrap"><canvas id="chartGastos"></canvas></div>
     </div>
 
-    <!-- PASO 4 -->
     <div class="card" id="step4">
       <div class="section-title"><span class="step-badge">4</span>Guardar y compartir</div>
       <div class="summary-box" id="resumenTexto"></div>
@@ -293,7 +286,6 @@ input:focus,select:focus,textarea:focus{border-color:#0c4a6e}
 
   </div>
 
-  <!-- HISTORIAL -->
   <div id="tabHistorial" style="display:none">
     <div class="card">
       <div class="section-title">Mis cuentas guardadas</div>
@@ -304,7 +296,6 @@ input:focus,select:focus,textarea:focus{border-color:#0c4a6e}
 </div>
 </div>
 
-<!-- Modal -->
 <div class="modal-overlay" id="modalHistorial">
   <div class="modal-box">
     <div class="modal-title">Resumen de cuenta</div>
@@ -317,31 +308,45 @@ input:focus,select:focus,textarea:focus{border-color:#0c4a6e}
 let personas=[],gastos=[],participantesSeleccionados=new Set();
 let lastSaldo={},lastTransfers=[];
 let chartInstance=null;
-const CATS_BASE=['Carne','Verdura','Bebidas','Postre','Condimentos/Insumos','Varios'];
+
+// ── Categorias base ampliadas ──
+const CATS_BASE=[
+  'Carne','Verdura','Bebidas','Gaseosa','Cerveza',
+  'Postre','Minuta','Cancha/Turno',
+  'Condimentos/Insumos','Varios'
+];
 let catsExtra=[];
 
 function getCats(){return [...CATS_BASE,...catsExtra];}
 
 function renderSelectCats(){
-  const s=document.getElementById('selCategoria');
-  s.innerHTML=getCats().map(c=>`<option value="${c}">${c}</option>`).join('');
+  const sel=document.getElementById('selCategoria');
+  const cur=sel.value;
+  sel.innerHTML=getCats().map(c=>`<option value="${c}">${c}</option>`).join('');
+  if(cur&&getCats().includes(cur))sel.value=cur;
 }
 
 function agregarCategoria(){
   const inp=document.getElementById('inputCatCustom');
   const v=inp.value.trim();
   if(!v)return;
-  if(getCats().map(c=>c.toLowerCase()).includes(v.toLowerCase())){alert('Esa categoría ya existe.');return;}
+  if(getCats().map(c=>c.toLowerCase()).includes(v.toLowerCase())){
+    alert('Esa categoria ya existe.');return;
+  }
   catsExtra.push(v);
   inp.value='';
   renderSelectCats();
   renderCatsCustom();
+  // Seleccionar la nueva categoria automaticamente
+  document.getElementById('selCategoria').value=v;
 }
 
 function renderCatsCustom(){
   const c=document.getElementById('catsCustom');
   if(!catsExtra.length){c.innerHTML='';return;}
-  c.innerHTML=catsExtra.map((cat,i)=>`<span class="cat-chip">${cat}<button onclick="quitarCat(${i})">&times;</button></span>`).join('');
+  c.innerHTML=catsExtra.map((cat,i)=>
+    `<span class="cat-chip">${cat}<button onclick="quitarCat(${i})">&times;</button></span>`
+  ).join('');
 }
 
 function quitarCat(i){
@@ -361,7 +366,9 @@ function agregarPersona(){
   const inp=document.getElementById('inputNombre');
   const nom=inp.value.trim();
   if(!nom)return;
-  if(personas.map(p=>p.toLowerCase()).includes(nom.toLowerCase())){alert('Persona ya agregada.');return;}
+  if(personas.map(p=>p.toLowerCase()).includes(nom.toLowerCase())){
+    alert('Persona ya agregada.');return;
+  }
   personas.push(nom);inp.value='';renderNombres();
 }
 document.getElementById('inputNombre').addEventListener('keydown',e=>{if(e.key==='Enter')agregarPersona();});
@@ -369,24 +376,33 @@ document.getElementById('inputCatCustom').addEventListener('keydown',e=>{if(e.ke
 
 function renderNombres(){
   const c=document.getElementById('listaNombres');
-  if(!personas.length){c.innerHTML='<div class="empty-state">Aún no hay personas</div>';return;}
-  c.innerHTML=personas.map((p,i)=>`<span class="tag">${p}<button onclick="quitarPersona(${i})">&times;</button></span>`).join('');
+  if(!personas.length){c.innerHTML='<div class="empty-state">Aun no hay personas</div>';return;}
+  c.innerHTML=personas.map((p,i)=>
+    `<span class="tag">${p}<button onclick="quitarPersona(${i})">&times;</button></span>`
+  ).join('');
 }
 function quitarPersona(i){personas.splice(i,1);renderNombres();}
 
 function pasarStep2(){
-  if(personas.length<2){alert('Agregá al menos 2 personas.');return;}
+  if(personas.length<2){alert('Agrega al menos 2 personas.');return;}
   document.getElementById('step2').style.display='block';
   renderSelectCats();
-  document.getElementById('selPagador').innerHTML=personas.map(p=>`<option value="${p}">${p} pagó</option>`).join('');
+  document.getElementById('selPagador').innerHTML=
+    personas.map(p=>`<option value="${p}">${p} pago</option>`).join('');
   participantesSeleccionados=new Set(personas);
-  document.getElementById('chipParticipantes').innerHTML=personas.map(p=>`<span class="part-chip selected" id="chip_${CSS.escape(p)}" onclick="toggleChip('${p}')">${p}</span>`).join('');
+  document.getElementById('chipParticipantes').innerHTML=
+    personas.map(p=>`<span class="part-chip selected" id="chip_${CSS.escape(p)}" onclick="toggleChip('${p}')">${p}</span>`).join('');
   document.getElementById('step2').scrollIntoView({behavior:'smooth'});
 }
 
 function toggleChip(p){
-  if(participantesSeleccionados.has(p)){participantesSeleccionados.delete(p);document.getElementById('chip_'+CSS.escape(p)).classList.remove('selected');}
-  else{participantesSeleccionados.add(p);document.getElementById('chip_'+CSS.escape(p)).classList.add('selected');}
+  if(participantesSeleccionados.has(p)){
+    participantesSeleccionados.delete(p);
+    document.getElementById('chip_'+CSS.escape(p)).classList.remove('selected');
+  } else {
+    participantesSeleccionados.add(p);
+    document.getElementById('chip_'+CSS.escape(p)).classList.add('selected');
+  }
 }
 function selectTodos(v){
   personas.forEach(p=>{
@@ -402,8 +418,8 @@ function agregarGasto(){
   const monto=parseFloat(document.getElementById('inputMonto').value);
   const nota=document.getElementById('inputNota').value.trim();
   const parts=[...participantesSeleccionados];
-  if(!monto||monto<=0){alert('Ingresá un monto válido.');return;}
-  if(!parts.length){alert('Seleccioná al menos un participante.');return;}
+  if(!monto||monto<=0){alert('Ingresa un monto valido.');return;}
+  if(!parts.length){alert('Selecciona al menos un participante.');return;}
   gastos.push({cat,pag,monto,parts,nota});
   document.getElementById('inputMonto').value='';
   document.getElementById('inputNota').value='';
@@ -414,87 +430,128 @@ function renderGastos(){
   const c=document.getElementById('listaGastos');
   if(!gastos.length){c.innerHTML='';return;}
   const total=gastos.reduce((s,g)=>s+g.monto,0);
-  c.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:13px;color:#4a7a9b">Gastos (${gastos.length})</span><span class="total-chip">$${fmt(total)}</span></div>`+
-  gastos.map((g,i)=>`
-    <div class="gasto-item">
-      <div class="gasto-header">
-        <span style="font-weight:700;font-size:14px">${g.cat}</span>
-        <div style="display:flex;gap:8px;align-items:center">
-          <span style="font-weight:700;color:#0c4a6e">$${fmt(g.monto)}</span>
-          <button class="btn btn-danger" onclick="quitarGasto(${i})" style="padding:4px 8px">&times;</button>
+  c.innerHTML=
+    `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <span style="font-size:13px;color:#4a7a9b">Gastos registrados (${gastos.length})</span>
+      <span class="total-chip">$${fmt(total)}</span>
+    </div>`+
+    gastos.map((g,i)=>`
+      <div class="gasto-item">
+        <div class="gasto-header">
+          <span style="font-weight:700;font-size:14px">${g.cat}</span>
+          <div style="display:flex;gap:8px;align-items:center">
+            <span style="font-weight:700;color:#0c4a6e">$${fmt(g.monto)}</span>
+            <button class="btn btn-danger btn-sm" onclick="quitarGasto(${i})">&times;</button>
+          </div>
         </div>
-      </div>
-      <div style="font-size:13px;color:#444">Pagó: <strong>${g.pag}</strong>${g.nota?` · <span style="color:#4a7a9b">${g.nota}</span>`:''}</div>
-      <div style="font-size:12px;color:#4a7a9b;margin-top:3px">Participan: ${g.parts.join(', ')}</div>
-    </div>`).join('');
+        <div style="font-size:13px;color:#444">
+          Pago: <strong>${g.pag}</strong>
+          ${g.nota?` &middot; <span style="color:#4a7a9b;font-style:italic">${g.nota}</span>`:''}
+        </div>
+        <div style="font-size:12px;color:#4a7a9b;margin-top:3px">
+          Participan (${g.parts.length}): ${g.parts.join(', ')}
+        </div>
+      </div>`
+    ).join('');
 }
 function quitarGasto(i){gastos.splice(i,1);renderGastos();}
+
 function fmt(n){return Math.round(n).toLocaleString('es-AR');}
 
+// ── CALCULO CORRECTO ──
+// Cada gasto divide su monto SOLO entre quienes participan en ese gasto.
+// El pagador adelanta el dinero; se le acredita el total del gasto.
+// Cada participante debe su parte proporcional.
 function calcular(){
-  if(!gastos.length){alert('Registrá al menos un gasto.');return;}
+  if(!gastos.length){alert('Registra al menos un gasto.');return;}
+
   const saldo={};
   personas.forEach(p=>saldo[p]=0);
+
   gastos.forEach(g=>{
+    // El pagador adelanta el monto completo: saldo positivo
     saldo[g.pag]+=g.monto;
+    // Cada participante debe su parte exacta
     const share=g.monto/g.parts.length;
-    g.parts.forEach(p=>saldo[p]-=share);
+    g.parts.forEach(p=>{
+      saldo[p]-=share;
+    });
   });
+
   lastSaldo={...saldo};
 
+  // Balance
   let balHTML='';
   personas.forEach(p=>{
     const v=saldo[p];
     const cls=v>0.5?'positivo':v<-0.5?'negativo':'neutro';
-    const lbl=v>0.5?`a recibir $${fmt(v)}`:v<-0.5?`debe pagar $${fmt(Math.abs(v))}`:'al día';
-    balHTML+=`<div class="result-person"><span style="font-size:15px;font-weight:500">${p}</span><span class="result-amount ${cls}">${lbl}</span></div>`;
+    const lbl=v>0.5
+      ?`a recibir $${fmt(v)}`
+      :v<-0.5?`debe pagar $${fmt(Math.abs(v))}`
+      :'al dia';
+    balHTML+=`<div class="result-person">
+      <span style="font-size:15px;font-weight:500">${p}</span>
+      <span class="result-amount ${cls}">${lbl}</span>
+    </div>`;
   });
   document.getElementById('resultadoBalance').innerHTML=balHTML;
 
-  const dd=personas.filter(p=>saldo[p]<-0.5).map(p=>({n:p,v:saldo[p]})).sort((a,b)=>a.v-b.v);
-  const aa=personas.filter(p=>saldo[p]>0.5).map(p=>({n:p,v:saldo[p]})).sort((a,b)=>b.v-a.v);
+  // Transferencias minimas (algoritmo greedy)
+  const deudores=personas
+    .filter(p=>saldo[p]<-0.5)
+    .map(p=>({n:p,v:Math.abs(saldo[p])}))
+    .sort((a,b)=>b.v-a.v);
+  const acreedores=personas
+    .filter(p=>saldo[p]>0.5)
+    .map(p=>({n:p,v:saldo[p]}))
+    .sort((a,b)=>b.v-a.v);
+
   lastTransfers=[];
   let di=0,ai=0;
-  while(di<dd.length&&ai<aa.length){
-    const d=dd[di],a=aa[ai];
-    const pago=Math.min(Math.abs(d.v),a.v);
-    lastTransfers.push({de:d.n,a:a.n,monto:pago});
-    d.v+=pago;a.v-=pago;
-    if(Math.abs(d.v)<0.5)di++;
-    if(Math.abs(a.v)<0.5)ai++;
+  while(di<deudores.length&&ai<acreedores.length){
+    const d=deudores[di],a=acreedores[ai];
+    const pago=Math.min(d.v,a.v);
+    if(pago>0.5)lastTransfers.push({de:d.n,a:a.n,monto:pago});
+    d.v-=pago;a.v-=pago;
+    if(d.v<0.5)di++;
+    if(a.v<0.5)ai++;
   }
 
   let trHTML='';
-  if(!lastTransfers.length)trHTML='<div class="empty-state">Nadie debe nada 🎉</div>';
-  else lastTransfers.forEach(t=>{trHTML+=`<div class="transfer-row"><strong>${t.de}</strong><span style="color:#4a7a9b;font-size:18px">→</span><strong>${t.a}</strong><span class="transfer-amount">$${fmt(t.monto)}</span></div>`;});
+  if(!lastTransfers.length){
+    trHTML='<div class="empty-state">Nadie debe nada! &#127881;</div>';
+  } else {
+    lastTransfers.forEach(t=>{
+      trHTML+=`<div class="transfer-row">
+        <strong>${t.de}</strong>
+        <span style="color:#4a7a9b;font-size:18px">&#8594;</span>
+        <strong>${t.a}</strong>
+        <span class="transfer-amount">$${fmt(t.monto)}</span>
+      </div>`;
+    });
+  }
   document.getElementById('resultadoTransferencias').innerHTML=trHTML;
 
-  // Gráfico de barras — gasto real por persona
-  const gastoPorPersona={};
-  personas.forEach(p=>gastoPorPersona[p]=0);
+  // Grafico: consumo real vs lo que pago cada persona
+  const consumo={};
+  const pagado={};
+  personas.forEach(p=>{consumo[p]=0;pagado[p]=0;});
   gastos.forEach(g=>{
+    pagado[g.pag]+=g.monto;
     const share=g.monto/g.parts.length;
-    g.parts.forEach(p=>gastoPorPersona[p]+=share);
+    g.parts.forEach(p=>consumo[p]+=share);
   });
+
   if(chartInstance)chartInstance.destroy();
   const ctx=document.getElementById('chartGastos').getContext('2d');
   chartInstance=new Chart(ctx,{
     type:'bar',
     data:{
       labels:personas,
-      datasets:[{
-        label:'Consumo ($)',
-        data:personas.map(p=>Math.round(gastoPorPersona[p])),
-        backgroundColor:'#378ADD',
-        borderRadius:6,
-        borderSkipped:false
-      },{
-        label:'Pagó ($)',
-        data:personas.map(p=>Math.round(gastos.filter(g=>g.pag===p).reduce((s,g)=>s+g.monto,0))),
-        backgroundColor:'#0c4a6e',
-        borderRadius:6,
-        borderSkipped:false
-      }]
+      datasets:[
+        {label:'Consumio ($)',data:personas.map(p=>Math.round(consumo[p])),backgroundColor:'#378ADD',borderRadius:5,borderSkipped:false},
+        {label:'Pago ($)',data:personas.map(p=>Math.round(pagado[p])),backgroundColor:'#0c4a6e',borderRadius:5,borderSkipped:false}
+      ]
     },
     options:{
       responsive:true,maintainAspectRatio:false,
@@ -506,17 +563,35 @@ function calcular(){
     }
   });
 
-  const titulo=document.getElementById('inputTitulo').value.trim()||'Sin título';
+  // Resumen texto — sin caracteres problematicos
+  const titulo=document.getElementById('inputTitulo').value.trim()||'Sin titulo';
+  const sep='--------------------------------';
   const ahora=new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
-  let txt=`CUENTAS CLARAS — ${titulo.toUpperCase()}\n${ahora}\n${'─'.repeat(34)}\n\nPARTICIPANTES: ${personas.join(', ')}\n\nDETALLE DE GASTOS:\n`;
-  gastos.forEach(g=>{txt+=`• ${g.cat}: $${fmt(g.monto)} — pagó ${g.pag}${g.nota?' ('+g.nota+')':''} — participan: ${g.parts.join(', ')}\n`;});
+  let txt='CUENTAS CLARAS\n';
+  txt+=titulo.toUpperCase()+'\n';
+  txt+=ahora+'\n'+sep+'\n\n';
+  txt+='PARTICIPANTES: '+personas.join(', ')+'\n\n';
+  txt+='DETALLE DE GASTOS:\n';
+  gastos.forEach(g=>{
+    txt+='- '+g.cat+': $'+fmt(g.monto);
+    txt+=' | pago: '+g.pag;
+    if(g.nota)txt+=' ('+g.nota+')';
+    txt+=' | participan: '+g.parts.join(', ')+'\n';
+  });
   const total=gastos.reduce((s,g)=>s+g.monto,0);
-  txt+=`\nTOTAL GENERAL: $${fmt(total)}\n${'─'.repeat(34)}\n\nBALANCE:\n`;
-  personas.forEach(p=>{const v=saldo[p];txt+=`${p}: ${v>0.5?'a recibir $'+fmt(v):v<-0.5?'debe pagar $'+fmt(Math.abs(v)):'al día'}\n`;});
-  txt+=`\nTRANSFERENCIAS:\n`;
-  if(!lastTransfers.length)txt+='Nadie debe nada.\n';
-  else lastTransfers.forEach(t=>{txt+=`${t.de} → ${t.a}: $${fmt(t.monto)}\n`;});
-  txt+=`\nGenerado con Cuentas Claras`;
+  txt+='\nTOTAL GENERAL: $'+fmt(total)+'\n'+sep+'\n\n';
+  txt+='BALANCE:\n';
+  personas.forEach(p=>{
+    const v=saldo[p];
+    txt+=p+': '+(v>0.5?'a recibir $'+fmt(v):v<-0.5?'debe pagar $'+fmt(Math.abs(v)):'al dia')+'\n';
+  });
+  txt+='\nTRANSFERENCIAS:\n';
+  if(!lastTransfers.length){
+    txt+='Nadie debe nada.\n';
+  } else {
+    lastTransfers.forEach(t=>{txt+=t.de+' -> '+t.a+': $'+fmt(t.monto)+'\n';});
+  }
+  txt+='\nGenerado con Cuentas Claras';
   document.getElementById('resumenTexto').textContent=txt;
 
   document.getElementById('step3').style.display='block';
@@ -525,7 +600,7 @@ function calcular(){
 }
 
 function guardarEnHistorial(){
-  const titulo=document.getElementById('inputTitulo').value.trim()||'Sin título';
+  const titulo=document.getElementById('inputTitulo').value.trim()||'Sin titulo';
   const resumen=document.getElementById('resumenTexto').textContent;
   window.guardarCuenta({titulo,resumen,personas,gastos,saldo:lastSaldo,transfers:lastTransfers});
 }
@@ -535,7 +610,8 @@ function compartirWhatsApp(){
 function descargarPDF(){
   const {jsPDF}=window.jspdf;
   const doc=new jsPDF({unit:'pt',format:'a4'});
-  const lines=doc.splitTextToSize(document.getElementById('resumenTexto').textContent,480);
+  const txt=document.getElementById('resumenTexto').textContent;
+  const lines=doc.splitTextToSize(txt,480);
   doc.setFont('helvetica');doc.setFontSize(11);
   let y=40;
   lines.forEach(l=>{if(y>780){doc.addPage();y=40;}doc.text(l,56,y);y+=16;});
