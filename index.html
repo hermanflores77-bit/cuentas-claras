@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0c4a6e">
+<title>Cuentas Claras</title>
+<link rel="manifest" href="manifest.json">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getFirestore, collection, addDoc, getDocs, query, orderBy, serverTimestamp }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey:            "AIzaSyA5s5E5PbV1wXvNS-AvhpYNmEdnjXQinoI",
+  authDomain:        "cuentas-claras-4c1eb.firebaseapp.com",
+  projectId:         "cuentas-claras-4c1eb",
+  storageBucket:     "cuentas-claras-4c1eb.firebasestorage.app",
+  messagingSenderId: "1067207975452",
+  appId:             "1:1067207975452:web:0007f9ccb2c7e20b1cf5d9"
+};
+
+const app  = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db   = getFirestore(app);
+const provider = new GoogleAuthProvider();
+let currentUser = null;
+
+onAuthStateChanged(auth, user => {
+  currentUser = user;
+  if (user) {
+    document.getElementById('loginScreen').style.display  = 'none';
+    document.getElementById('mainApp').style.display      = 'block';
+    document.getElementById('userName').textContent       = user.displayName;
+    document.getElementById('userAvatar').src             = user.photoURL;
+    loadHistory();
+  } else {
+    document.getElementById('loginScreen').style.display  = 'flex';
+    document.getElementById('mainApp').style.display      = 'none';
+  }
+});
+
+window.loginGoogle = async () => {
+  try { await signInWithPopup(auth, provider); }
+  catch(e){ alert('Error al iniciar sesión: ' + e.message); }
+};
+
+window.logout = async () => {
+  if(confirm('¿Cerrar sesión?')) await signOut(auth);
+};
+
+window.guardarCuenta = async (resumen, personas, gastos, saldo, transfers) => {
+  if(!currentUser){ alert('Debés iniciar sesión para guardar.'); return; }
+  try {
+    await addDoc(collection(db, 'usuarios', currentUser.uid, 'cuentas'), {
+      resumen, personas, gastos, saldo, transfers,
+      fecha: serverTimestamp()
+    });
+    alert('¡Cuenta guardada en tu historial!');
+    loadHistory();
+  } catch(e){ alert('Error al guardar: ' + e.message); }
+};
+
+async function loadHistory() {
+  if(!currentUser) return;
+  const ref  = collection(db, 'usuarios', currentUser.uid, 'cuentas');
+  const q    = query(ref, orderBy('fecha','desc'));
+  const snap = await getDocs(q);
+  const container = document.getElementById('historialLista');
+  if(snap.empty){ container.innerHTML='<div class="empty-state">No hay cuentas guardadas aún</div>'; return; }
+  container.innerHTML = '';
+  snap.forEach(doc => {
+    const d = doc.data();
+    const fecha = d.fecha?.toDate
+      ? d.fecha.toDate().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})
+      : 'Sin fecha';
+    const total = (d.gastos||[]).reduce((s,g)=>s+g.monto,0);
+    const el = document.createElement('div');
+    el.className = 'hist-item';
+    el.innerHTML = `
+      <div class="hist-header">
+        <span class="hist-fecha">${fecha}</span>
+        <span class="total-chip">$${fmt(total)}</span>
+      </div>
+      <div class="hist-personas">${(d.personas||[]).join(', ')}</div>
+      <button class="btn btn-secondary btn-sm" style="margin-top:8px"
+        onclick="verResumen(this)" data-txt="${encodeURIComponent(d.resumen||'')}">Ver resumen</button>`;
+    container.appendChild(el);
+  });
+}
+
+window.verResumen = (btn) => {
+  document.getElementById('resumenHistorial').textContent = decodeURIComponent(btn.dataset.txt);
+  document.getElementById('modalHistorial').style.display = 'flex';
+};
+window.cerrarModal = () => {
+  document.getElementById('modalHistorial').style.display = 'none';
+};
+</script>
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;font-size:16px;background:#e8f4fb;color:#1a1a1a;min-height:100vh}
+
+#loginScreen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:24px;text-align:center}
+.login-card{background:#fff;border-radius:16px;border:1px solid #b8d9ee;padding:36px 28px;max-width:340px;width:100%}
+.login-logo{font-size:42px;margin-bottom:8px}
+.login-title{font-size:22px;font-weight:700;color:#0c4a6e;margin-bottom:6px}
+.login-sub{font-size:14px;color:#4a7a9b;margin-bottom:28px;line-height:1.5}
+.btn-google{display:flex;align-items:center;justify-content:center;gap:10px;background:#fff;border:1.5px solid #b8d9ee;border-radius:10px;padding:12px 20px;font-size:15px;font-weight:600;color:#0c4a6e;cursor:pointer;width:100%;transition:background .15s}
+.btn-google:hover{background:#e0f0f9}
+.btn-google img{width:20px;height:20px}
+
+#mainApp{display:none}
+.app{max-width:600px;margin:0 auto;padding:12px}
+
+.topbar{display:flex;align-items:center;justify-content:space-between;background:#0c4a6e;border-radius:12px;padding:10px 14px;margin-bottom:14px}
+.topbar-left{display:flex;align-items:center;gap:10px}
+.topbar-title{color:#fff;font-size:16px;font-weight:700}
+.avatar{width:32px;height:32px;border-radius:50%;border:2px solid #7ab8d9;object-fit:cover}
+.user-name{color:#cde8f7;font-size:13px}
+.btn-logout{background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer}
+.btn-logout:hover{background:rgba(255,255,255,.25)}
+
+.tabs{display:flex;gap:6px;margin-bottom:14px}
+.tab{flex:1;padding:9px;border-radius:8px;border:1px solid #b8d9ee;background:#fff;color:#4a7a9b;font-size:14px;font-weight:600;cursor:pointer;text-align:center;transition:all .15s}
+.tab.active{background:#0c4a6e;color:#fff;border-color:#0c4a6e}
+
+.card{background:#fff;border-radius:12px;border:1px solid #b8d9ee;padding:16px;margin-bottom:14px}
+.section-title{font-size:15px;font-weight:600;color:#0c4a6e;margin-bottom:12px;border-bottom:1px solid #d0eaf7;padding-bottom:6px}
+.step-badge{display:inline-block;background:#0c4a6e;color:#fff;border-radius:50%;width:22px;height:22px;text-align:center;line-height:22px;font-size:12px;font-weight:700;margin-right:8px}
+input[type=text],input[type=number],select{width:100%;padding:9px 11px;border:1px solid #b8d9ee;border-radius:8px;font-size:15px;outline:none;background:#fff;color:#1a1a1a;transition:border-color .2s}
+input:focus,select:focus{border-color:#0c4a6e}
+.row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+.row input[type=text]{flex:1}
+.btn{padding:9px 16px;border-radius:8px;border:none;cursor:pointer;font-size:14px;font-weight:600;transition:background .15s}
+.btn-primary{background:#0c4a6e;color:#fff}
+.btn-primary:hover{background:#0a3d5c}
+.btn-secondary{background:#e0f0f9;color:#0c4a6e;border:1px solid #b8d9ee}
+.btn-secondary:hover{background:#cde6f5}
+.btn-danger{background:#fceaea;color:#b91c1c;border:1px solid #f5c2c2;font-size:13px;padding:6px 10px}
+.btn-sm{padding:5px 10px;font-size:13px}
+.btn-full{width:100%}
+.tag{display:inline-flex;align-items:center;gap:6px;background:#e0f0f9;color:#0a3d5c;border-radius:20px;padding:4px 10px;font-size:13px;margin:3px}
+.tag button{background:none;border:none;cursor:pointer;color:#b91c1c;font-size:15px;line-height:1;padding:0}
+.gasto-item{background:#f2f9fd;border:1px solid #b8d9ee;border-radius:8px;padding:10px 12px;margin-bottom:8px}
+.gasto-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.participantes-grid{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.part-chip{background:#fff;border:1px solid #b8d9ee;border-radius:16px;padding:4px 10px;font-size:13px;cursor:pointer;transition:all .15s;user-select:none}
+.part-chip.selected{background:#0c4a6e;color:#fff;border-color:#0c4a6e}
+.result-person{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #d0eaf7}
+.result-person:last-child{border-bottom:none}
+.result-amount{font-size:16px;font-weight:700}
+.positivo{color:#15803d}
+.negativo{color:#dc2626}
+.neutro{color:#888;font-weight:400;font-size:14px}
+.transfer-row{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#fff;border:1px solid #b8d9ee;border-radius:8px;margin-bottom:6px;font-size:14px;flex-wrap:wrap}
+.transfer-amount{font-weight:700;color:#dc2626;margin-left:auto}
+.summary-box{background:#f2f9fd;border:1px solid #b8d9ee;border-radius:10px;padding:14px;font-size:13px;line-height:1.8;white-space:pre-wrap;word-break:break-word;max-height:260px;overflow-y:auto}
+.share-btns{display:flex;gap:8px;margin-top:10px}
+.share-btns .btn{flex:1}
+.total-chip{background:#e0f0f9;color:#0c4a6e;border-radius:20px;padding:3px 12px;font-size:13px;font-weight:600}
+.empty-state{text-align:center;color:#999;font-size:14px;padding:20px 0}
+.hist-item{background:#f2f9fd;border:1px solid #b8d9ee;border-radius:10px;padding:12px 14px;margin-bottom:10px}
+.hist-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+.hist-fecha{font-size:13px;color:#4a7a9b;font-weight:600}
+.hist-personas{font-size:13px;color:#555}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:999;align-items:center;justify-content:center;padding:16px}
+.modal-box{background:#fff;border-radius:14px;padding:20px;max-width:520px;width:100%;max-height:80vh;display:flex;flex-direction:column;gap:12px}
+.modal-title{font-size:15px;font-weight:600;color:#0c4a6e}
+.modal-body{font-size:13px;line-height:1.8;white-space:pre-wrap;overflow-y:auto;flex:1;background:#f2f9fd;border:1px solid #b8d9ee;border-radius:8px;padding:12px}
+#step2,#step3,#step4{display:none}
+</style>
+</head>
+<body>
+
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="login-logo">💰</div>
+    <div class="login-title">Cuentas Claras</div>
+    <div class="login-sub">Dividí gastos entre amigos, familia y compañeros. Tu historial siempre disponible.</div>
+    <button class="btn-google" onclick="loginGoogle()">
+      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google">
+      Continuar con Google
+    </button>
+  </div>
+</div>
+
+<div id="mainApp">
+<div class="app">
+
+  <div class="topbar">
+    <div class="topbar-left">
+      <img class="avatar" id="userAvatar" src="" alt="avatar">
+      <div>
+        <div class="topbar-title">Cuentas Claras</div>
+        <div class="user-name" id="userName"></div>
+      </div>
+    </div>
+    <button class="btn-logout" onclick="logout()">Salir</button>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" id="tabBtnNueva" onclick="switchTab('Nueva')">+ Nueva cuenta</button>
+    <button class="tab" id="tabBtnHistorial" onclick="switchTab('Historial')">Historial</button>
+  </div>
+
+  <div id="tabNueva">
+    <div class="card" id="step1">
+      <div class="section-title"><span class="step-badge">1</span>Personas que participaron</div>
+      <div class="row">
+        <input type="text" id="inputNombre" placeholder="Nombre..." maxlength="30"/>
+        <button class="btn btn-primary btn-sm" onclick="agregarPersona()">+ Agregar</button>
+      </div>
+      <div id="listaNombres"></div>
+      <button class="btn btn-primary btn-full" style="margin-top:10px" onclick="pasarStep2()">Continuar &rarr;</button>
+    </div>
+
+    <div class="card" id="step2">
+      <div class="section-title"><span class="step-badge">2</span>Registro de gastos</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+        <select id="selCategoria" style="flex:1;min-width:120px">
+          <option>Carne</option><option>Verdura</option><option>Bebidas</option>
+          <option>Postre</option><option>Condimentos/Insumos</option><option>Varios</option>
+        </select>
+        <select id="selPagador" style="flex:1;min-width:120px"></select>
+        <input type="number" id="inputMonto" placeholder="Monto $" min="0" step="1" style="width:110px;flex:none"/>
+      </div>
+      <div style="margin-bottom:8px">
+        <div style="font-size:13px;color:#4a7a9b;margin-bottom:5px">¿Quiénes participan en este gasto?</div>
+        <div id="chipParticipantes" class="participantes-grid"></div>
+        <div style="margin-top:6px;display:flex;gap:6px">
+          <button class="btn btn-secondary btn-sm" onclick="selectTodos(true)">Todos</button>
+          <button class="btn btn-secondary btn-sm" onclick="selectTodos(false)">Ninguno</button>
+        </div>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="agregarGasto()">+ Agregar gasto</button>
+      <div id="listaGastos" style="margin-top:14px"></div>
+      <button class="btn btn-primary btn-full" style="margin-top:10px" onclick="calcular()">Calcular cuentas &rarr;</button>
+    </div>
+
+    <div class="card" id="step3">
+      <div class="section-title"><span class="step-badge">3</span>Resultado final</div>
+      <div id="resultadoBalance"></div>
+      <div style="margin-top:12px">
+        <div style="font-size:14px;font-weight:600;color:#0c4a6e;margin-bottom:6px">Transferencias a realizar:</div>
+        <div id="resultadoTransferencias"></div>
+      </div>
+    </div>
+
+    <div class="card" id="step4">
+      <div class="section-title"><span class="step-badge">4</span>Guardar y compartir</div>
+      <div class="summary-box" id="resumenTexto"></div>
+      <div class="share-btns">
+        <button class="btn btn-secondary" onclick="compartirWhatsApp()">WhatsApp</button>
+        <button class="btn btn-primary" onclick="descargarPDF()">PDF</button>
+      </div>
+      <button class="btn btn-secondary btn-full" style="margin-top:8px" onclick="guardarEnHistorial()">Guardar en historial</button>
+      <button class="btn btn-secondary btn-full" style="margin-top:8px;font-size:13px" onclick="reiniciar()">Nueva cuenta</button>
+    </div>
+  </div>
+
+  <div id="tabHistorial" style="display:none">
+    <div class="card">
+      <div class="section-title">Mis cuentas guardadas</div>
+      <div id="historialLista"><div class="empty-state">Cargando...</div></div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<div class="modal-overlay" id="modalHistorial">
+  <div class="modal-box">
+    <div class="modal-title">Resumen de cuenta</div>
+    <div class="modal-body" id="resumenHistorial"></div>
+    <button class="btn btn-primary" onclick="cerrarModal()">Cerrar</button>
+  </div>
+</div>
+
+<script>
+let personas=[],gastos=[],participantesSeleccionados=new Set();
+let lastSaldo={},lastTransfers=[];
+
+function switchTab(t){
+  document.getElementById('tabNueva').style.display     = t==='Nueva'?'block':'none';
+  document.getElementById('tabHistorial').style.display = t==='Historial'?'block':'none';
+  document.getElementById('tabBtnNueva').className      = 'tab'+(t==='Nueva'?' active':'');
+  document.getElementById('tabBtnHistorial').className  = 'tab'+(t==='Historial'?' active':'');
+}
+
+function agregarPersona(){
+  const inp=document.getElementById('inputNombre');
+  const nom=inp.value.trim();
+  if(!nom)return;
+  if(personas.map(p=>p.toLowerCase()).includes(nom.toLowerCase())){alert('Persona ya agregada.');return;}
+  personas.push(nom);inp.value='';renderNombres();
+}
+document.getElementById('inputNombre').addEventListener('keydown',e=>{if(e.key==='Enter')agregarPersona();});
+
+function renderNombres(){
+  const c=document.getElementById('listaNombres');
+  if(!personas.length){c.innerHTML='<div class="empty-state">Aún no hay personas</div>';return;}
+  c.innerHTML=personas.map((p,i)=>`<span class="tag">${p}<button onclick="quitarPersona(${i})">&times;</button></span>`).join('');
+}
+function quitarPersona(i){personas.splice(i,1);renderNombres();}
+
+function pasarStep2(){
+  if(personas.length<2){alert('Agregá al menos 2 personas.');return;}
+  document.getElementById('step2').style.display='block';
+  document.getElementById('selPagador').innerHTML=personas.map(p=>`<option value="${p}">${p} pagó</option>`).join('');
+  participantesSeleccionados=new Set(personas);
+  document.getElementById('chipParticipantes').innerHTML=personas.map(p=>`<span class="part-chip selected" id="chip_${CSS.escape(p)}" onclick="toggleChip('${p}')">${p}</span>`).join('');
+  document.getElementById('step2').scrollIntoView({behavior:'smooth'});
+}
+
+function toggleChip(p){
+  if(participantesSeleccionados.has(p)){participantesSeleccionados.delete(p);document.getElementById('chip_'+CSS.escape(p)).classList.remove('selected');}
+  else{participantesSeleccionados.add(p);document.getElementById('chip_'+CSS.escape(p)).classList.add('selected');}
+}
+function selectTodos(v){
+  personas.forEach(p=>{
+    const el=document.getElementById('chip_'+CSS.escape(p));
+    if(el){v?el.classList.add('selected'):el.classList.remove('selected');}
+    v?participantesSeleccionados.add(p):participantesSeleccionados.delete(p);
+  });
+}
+
+function agregarGasto(){
+  const cat=document.getElementById('selCategoria').value;
+  const pag=document.getElementById('selPagador').value;
+  const monto=parseFloat(document.getElementById('inputMonto').value);
+  const parts=[...participantesSeleccionados];
+  if(!monto||monto<=0){alert('Ingresá un monto válido.');return;}
+  if(!parts.length){alert('Seleccioná al menos un participante.');return;}
+  gastos.push({cat,pag,monto,parts});
+  document.getElementById('inputMonto').value='';
+  renderGastos();
+}
+function renderGastos(){
+  const c=document.getElementById('listaGastos');
+  if(!gastos.length){c.innerHTML='';return;}
+  const total=gastos.reduce((s,g)=>s+g.monto,0);
+  c.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:13px;color:#4a7a9b">Gastos (${gastos.length})</span><span class="total-chip">$${fmt(total)}</span></div>`+
+  gastos.map((g,i)=>`<div class="gasto-item"><div class="gasto-header"><span style="font-weight:600;font-size:14px">${g.cat}</span><div style="display:flex;gap:8px;align-items:center"><span style="font-weight:700;color:#0c4a6e">$${fmt(g.monto)}</span><button class="btn btn-danger" onclick="quitarGasto(${i})">&times;</button></div></div><div style="font-size:13px;color:#444">Pagó: <strong>${g.pag}</strong></div><div style="font-size:12px;color:#4a7a9b;margin-top:3px">Participan: ${g.parts.join(', ')}</div></div>`).join('');
+}
+function quitarGasto(i){gastos.splice(i,1);renderGastos();}
+function fmt(n){return Math.round(n).toLocaleString('es-AR');}
+
+function calcular(){
+  if(!gastos.length){alert('Registrá al menos un gasto.');return;}
+  const saldo={};
+  personas.forEach(p=>saldo[p]=0);
+  gastos.forEach(g=>{
+    saldo[g.pag]+=g.monto;
+    const share=g.monto/g.parts.length;
+    g.parts.forEach(p=>saldo[p]-=share);
+  });
+  lastSaldo={...saldo};
+  let balHTML='';
+  personas.forEach(p=>{
+    const v=saldo[p];
+    const cls=v>0.5?'positivo':v<-0.5?'negativo':'neutro';
+    const lbl=v>0.5?`a recibir $${fmt(v)}`:v<-0.5?`debe pagar $${fmt(Math.abs(v))}`:'al día';
+    balHTML+=`<div class="result-person"><span style="font-size:15px;font-weight:500">${p}</span><span class="result-amount ${cls}">${lbl}</span></div>`;
+  });
+  document.getElementById('resultadoBalance').innerHTML=balHTML;
+
+  const dd=personas.filter(p=>saldo[p]<-0.5).map(p=>({n:p,v:saldo[p]})).sort((a,b)=>a.v-b.v);
+  const aa=personas.filter(p=>saldo[p]>0.5).map(p=>({n:p,v:saldo[p]})).sort((a,b)=>b.v-a.v);
+  lastTransfers=[];
+  let di=0,ai=0;
+  while(di<dd.length&&ai<aa.length){
+    const d=dd[di],a=aa[ai];
+    const pago=Math.min(Math.abs(d.v),a.v);
+    lastTransfers.push({de:d.n,a:a.n,monto:pago});
+    d.v+=pago;a.v-=pago;
+    if(Math.abs(d.v)<0.5)di++;
+    if(Math.abs(a.v)<0.5)ai++;
+  }
+  let trHTML='';
+  if(!lastTransfers.length)trHTML='<div class="empty-state">Nadie debe nada 🎉</div>';
+  else lastTransfers.forEach(t=>{trHTML+=`<div class="transfer-row"><strong>${t.de}</strong><span style="color:#4a7a9b;font-size:18px">→</span><strong>${t.a}</strong><span class="transfer-amount">$${fmt(t.monto)}</span></div>`;});
+  document.getElementById('resultadoTransferencias').innerHTML=trHTML;
+
+  const ahora=new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  let txt=`CUENTAS CLARAS\n${ahora}\n${'─'.repeat(32)}\n\nPARTICIPANTES: ${personas.join(', ')}\n\nDETALLE DE GASTOS:\n`;
+  gastos.forEach(g=>{txt+=`• ${g.cat}: $${fmt(g.monto)} — pagó ${g.pag} — participan: ${g.parts.join(', ')}\n`;});
+  const total=gastos.reduce((s,g)=>s+g.monto,0);
+  txt+=`\nTOTAL GENERAL: $${fmt(total)}\n${'─'.repeat(32)}\n\nBALANCE:\n`;
+  personas.forEach(p=>{const v=saldo[p];txt+=`${p}: ${v>0.5?'a recibir $'+fmt(v):v<-0.5?'debe pagar $'+fmt(Math.abs(v)):'al día'}\n`;});
+  txt+=`\nTRANSFERENCIAS:\n`;
+  if(!lastTransfers.length)txt+='Nadie debe nada.\n';
+  else lastTransfers.forEach(t=>{txt+=`${t.de} → ${t.a}: $${fmt(t.monto)}\n`;});
+  txt+=`\nGenerado con Cuentas Claras`;
+  document.getElementById('resumenTexto').textContent=txt;
+
+  document.getElementById('step3').style.display='block';
+  document.getElementById('step4').style.display='block';
+  document.getElementById('step3').scrollIntoView({behavior:'smooth'});
+}
+
+function guardarEnHistorial(){
+  const resumen=document.getElementById('resumenTexto').textContent;
+  window.guardarCuenta(resumen,personas,gastos,lastSaldo,lastTransfers);
+}
+function compartirWhatsApp(){
+  window.open('https://wa.me/?text='+encodeURIComponent(document.getElementById('resumenTexto').textContent),'_blank');
+}
+function descargarPDF(){
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({unit:'pt',format:'a4'});
+  const lines=doc.splitTextToSize(document.getElementById('resumenTexto').textContent,480);
+  doc.setFont('helvetica');doc.setFontSize(11);
+  let y=40;
+  lines.forEach(l=>{if(y>780){doc.addPage();y=40;}doc.text(l,56,y);y+=16;});
+  doc.save('cuentas-claras.pdf');
+}
+function reiniciar(){
+  personas=[];gastos=[];participantesSeleccionados=new Set();lastSaldo={};lastTransfers=[];
+  renderNombres();
+  document.getElementById('listaGastos').innerHTML='';
+  ['step2','step3','step4'].forEach(s=>document.getElementById(s).style.display='none');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+renderNombres();
+</script>
+</body>
+</html>

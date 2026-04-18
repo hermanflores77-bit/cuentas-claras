@@ -1,0 +1,25 @@
+{
+  "name": "Cuentas Claras",
+  "short_name": "CuentasClaras",
+  "description": "Dividí gastos entre amigos, familia y compañeros",
+  "start_url": "/cuentas-claras/",
+  "scope": "/cuentas-claras/",
+  "display": "standalone",
+  "background_color": "#e8f4fb",
+  "theme_color": "#0c4a6e",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "https://via.placeholder.com/192x192/0c4a6e/ffffff?text=CC",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://via.placeholder.com/512x512/0c4a6e/ffffff?text=CC",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
