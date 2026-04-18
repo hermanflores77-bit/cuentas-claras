@@ -8,20 +8,21 @@
 <link rel="manifest" href="manifest.json">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, query, orderBy, serverTimestamp }
+import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, setDoc, getDoc, query, orderBy, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const firebaseConfig = {
-  apiKey:            "AIzaSyA5s5E5PbV1wXvNS-AvhpYNmEdnjXQinoI",
-  authDomain:        "cuentas-claras-4c1eb.firebaseapp.com",
-  projectId:         "cuentas-claras-4c1eb",
-  storageBucket:     "cuentas-claras-4c1eb.firebasestorage.app",
-  messagingSenderId: "1067207975452",
-  appId:             "1:1067207975452:web:0007f9ccb2c7e20b1cf5d9"
+  apiKey:"AIzaSyA5s5E5PbV1wXvNS-AvhpYNmEdnjXQinoI",
+  authDomain:"cuentas-claras-4c1eb.firebaseapp.com",
+  projectId:"cuentas-claras-4c1eb",
+  storageBucket:"cuentas-claras-4c1eb.firebasestorage.app",
+  messagingSenderId:"1067207975452",
+  appId:"1:1067207975452:web:0007f9ccb2c7e20b1cf5d9"
 };
 
 const app=initializeApp(firebaseConfig);
@@ -38,6 +39,8 @@ onAuthStateChanged(auth,user=>{
     document.getElementById('userName').textContent=user.displayName;
     document.getElementById('userAvatar').src=user.photoURL;
     loadHistory();
+    loadGrupos();
+    loadStats();
   } else {
     document.getElementById('loginScreen').style.display='flex';
     document.getElementById('mainApp').style.display='none';
@@ -50,12 +53,23 @@ window.loginGoogle=async()=>{
 };
 window.logout=async()=>{if(confirm('Cerrar sesion?'))await signOut(auth);};
 
+// ── Guardar cuenta ──
 window.guardarCuenta=async(data)=>{
   if(!currentUser){alert('Debes iniciar sesion para guardar.');return;}
   try{
-    await addDoc(collection(db,'usuarios',currentUser.uid,'cuentas'),{...data,fecha:serverTimestamp()});
+    const ref=await addDoc(collection(db,'usuarios',currentUser.uid,'cuentas'),{...data,fecha:serverTimestamp()});
+    // Guardar resultado publico para link compartible
+    await setDoc(doc(db,'publico',ref.id),{
+      titulo:data.titulo,personas:data.personas,
+      resumen:data.resumen,transfers:data.transfers,
+      saldo:data.saldo,fecha:serverTimestamp()
+    });
+    const link=location.origin+location.pathname+'?ver='+ref.id;
+    document.getElementById('linkCompartible').value=link;
+    document.getElementById('boxLink').style.display='block';
     alert('Cuenta guardada!');
     loadHistory();
+    loadStats();
   }catch(e){alert('Error al guardar: '+e.message);}
 };
 
@@ -63,41 +77,196 @@ window.eliminarCuenta=async(id)=>{
   if(!confirm('Eliminar esta cuenta del historial?'))return;
   try{
     await deleteDoc(doc(db,'usuarios',currentUser.uid,'cuentas',id));
-    loadHistory();
-  }catch(e){alert('Error al eliminar: '+e.message);}
+    loadHistory();loadStats();
+  }catch(e){alert('Error: '+e.message);}
 };
 
+// ── Historial ──
 async function loadHistory(){
   if(!currentUser)return;
-  const ref=collection(db,'usuarios',currentUser.uid,'cuentas');
-  const q=query(ref,orderBy('fecha','desc'));
-  const snap=await getDocs(q);
+  const snap=await getDocs(query(collection(db,'usuarios',currentUser.uid,'cuentas'),orderBy('fecha','desc')));
   const c=document.getElementById('historialLista');
   if(snap.empty){c.innerHTML='<div class="empty-state">No hay cuentas guardadas aun</div>';return;}
   c.innerHTML='';
   snap.forEach(d=>{
     const data=d.data();
-    const fecha=data.fecha?.toDate
-      ?data.fecha.toDate().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})
-      :'Sin fecha';
+    const fecha=data.fecha?.toDate?data.fecha.toDate().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}):'Sin fecha';
     const total=(data.gastos||[]).reduce((s,g)=>s+g.monto,0);
-    const titulo=data.titulo||'Sin titulo';
     const el=document.createElement('div');
     el.className='hist-item';
     el.innerHTML=`
       <div class="hist-header">
-        <div>
-          <div class="hist-titulo">${titulo}</div>
-          <div class="hist-fecha">${fecha} &middot; ${(data.personas||[]).join(', ')}</div>
-        </div>
+        <div><div class="hist-titulo">${data.titulo||'Sin titulo'}</div>
+        <div class="hist-fecha">${fecha} &middot; ${(data.personas||[]).join(', ')}</div></div>
         <span class="total-chip">$${fmt(total)}</span>
       </div>
-      <div style="display:flex;gap:6px;margin-top:8px">
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
         <button class="btn btn-secondary btn-sm" onclick="verResumen(this)" data-txt="${encodeURIComponent(data.resumen||'')}">Ver resumen</button>
+        <button class="btn btn-secondary btn-sm" onclick="copiarLink('${d.id}')">Copiar link</button>
         <button class="btn btn-danger btn-sm" onclick="eliminarCuenta('${d.id}')">Eliminar</button>
       </div>`;
     c.appendChild(el);
   });
+}
+
+window.copiarLink=(id)=>{
+  const link=location.origin+location.pathname+'?ver='+id;
+  navigator.clipboard.writeText(link).then(()=>alert('Link copiado!')).catch(()=>{
+    prompt('Copia este link:',link);
+  });
+};
+
+// ── Vista publica (sin login) ──
+async function checkPublicView(){
+  const params=new URLSearchParams(location.search);
+  const id=params.get('ver');
+  if(!id)return false;
+  try{
+    const snap=await getDoc(doc(db,'publico',id));
+    if(!snap.exists()){document.body.innerHTML='<div style="padding:40px;text-align:center;font-family:system-ui"><h2>Cuenta no encontrada</h2></div>';return true;}
+    const d=snap.data();
+    const fecha=d.fecha?.toDate?d.fecha.toDate().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}):'';
+    let trHTML='';
+    (d.transfers||[]).forEach(t=>{
+      trHTML+=`<div class="transfer-row"><strong>${t.de}</strong><span style="color:#4a7a9b;margin:0 6px">-></span><strong>${t.a}</strong><span class="transfer-amount" style="margin-left:auto;color:#dc2626;font-weight:700">$${fmt(t.monto)}</span></div>`;
+    });
+    let balHTML='';
+    (d.personas||[]).forEach(p=>{
+      const v=(d.saldo||{})[p]||0;
+      const cls=v>0.5?'positivo':v<-0.5?'negativo':'neutro';
+      const lbl=v>0.5?'a recibir $'+fmt(v):v<-0.5?'debe pagar $'+fmt(Math.abs(v)):'al dia';
+      balHTML+=`<div class="result-person"><span style="font-weight:500">${p}</span><span class="result-amount ${cls}">${lbl}</span></div>`;
+    });
+    document.body.innerHTML=`
+      <div style="max-width:480px;margin:0 auto;padding:20px;font-family:system-ui;background:#e8f4fb;min-height:100vh">
+        <div style="background:#0c4a6e;color:#fff;border-radius:12px;padding:14px 16px;margin-bottom:16px">
+          <div style="font-size:18px;font-weight:700">Cuentas Claras</div>
+          <div style="font-size:14px;opacity:.8">${d.titulo||''}  ${fecha}</div>
+        </div>
+        <div style="background:#fff;border-radius:12px;border:1px solid #b8d9ee;padding:16px;margin-bottom:14px">
+          <div style="font-size:14px;font-weight:600;color:#0c4a6e;margin-bottom:10px">Balance</div>
+          ${balHTML}
+        </div>
+        <div style="background:#fff;border-radius:12px;border:1px solid #b8d9ee;padding:16px;margin-bottom:14px">
+          <div style="font-size:14px;font-weight:600;color:#0c4a6e;margin-bottom:8px">Transferencias</div>
+          ${trHTML||'<div style="color:#999;font-size:14px">Nadie debe nada</div>'}
+        </div>
+        <div style="text-align:center;font-size:12px;color:#4a7a9b;margin-top:20px">
+          Generado con <strong>Cuentas Claras</strong><br>
+          <a href="${location.origin+location.pathname}" style="color:#0c4a6e">Usar la app gratis</a>
+        </div>
+      </div>`;
+    return true;
+  }catch(e){return false;}
+}
+
+// ── Grupos frecuentes ──
+async function loadGrupos(){
+  if(!currentUser)return;
+  const snap=await getDocs(collection(db,'usuarios',currentUser.uid,'grupos'));
+  const sel=document.getElementById('selGrupo');
+  sel.innerHTML='<option value="">-- Cargar grupo guardado --</option>';
+  snap.forEach(d=>{
+    const opt=document.createElement('option');
+    opt.value=JSON.stringify(d.data().personas);
+    opt.textContent=d.data().nombre;
+    opt.dataset.id=d.id;
+    sel.appendChild(opt);
+  });
+  window._gruposSnap=snap;
+}
+
+window.cargarGrupo=()=>{
+  const sel=document.getElementById('selGrupo');
+  if(!sel.value)return;
+  const lista=JSON.parse(sel.value);
+  personas=[];
+  lista.forEach(p=>{personas.push(p);});
+  renderNombres();
+};
+
+window.guardarGrupo=async()=>{
+  if(!currentUser)return;
+  if(personas.length<2){alert('Agrega al menos 2 personas primero.');return;}
+  const nombre=prompt('Nombre para este grupo (ej: Los del padel):');
+  if(!nombre)return;
+  try{
+    await addDoc(collection(db,'usuarios',currentUser.uid,'grupos'),{nombre,personas});
+    alert('Grupo guardado!');
+    loadGrupos();
+  }catch(e){alert('Error: '+e.message);}
+};
+
+window.eliminarGrupo=async()=>{
+  const sel=document.getElementById('selGrupo');
+  const opt=sel.options[sel.selectedIndex];
+  if(!opt||!opt.dataset.id){alert('Selecciona un grupo primero.');return;}
+  if(!confirm('Eliminar grupo "'+opt.textContent+'"?'))return;
+  try{
+    await deleteDoc(doc(db,'usuarios',currentUser.uid,'grupos',opt.dataset.id));
+    loadGrupos();
+  }catch(e){alert('Error: '+e.message);}
+};
+
+// ── Estadisticas ──
+async function loadStats(){
+  if(!currentUser)return;
+  const snap=await getDocs(query(collection(db,'usuarios',currentUser.uid,'cuentas'),orderBy('fecha','desc')));
+  if(snap.empty){
+    document.getElementById('statsContent').innerHTML='<div class="empty-state">No hay datos aun</div>';
+    return;
+  }
+  let totalGastado=0,totalCuentas=0;
+  const porCat={},porMes={},personas_freq={};
+  snap.forEach(d=>{
+    const data=d.data();
+    totalCuentas++;
+    (data.gastos||[]).forEach(g=>{
+      totalGastado+=g.monto;
+      porCat[g.cat]=(porCat[g.cat]||0)+g.monto;
+    });
+    (data.personas||[]).forEach(p=>{
+      if(p!==currentUser.displayName)
+        personas_freq[p]=(personas_freq[p]||0)+1;
+    });
+    const fecha=data.fecha?.toDate?data.fecha.toDate():null;
+    if(fecha){
+      const mes=fecha.toLocaleDateString('es-AR',{month:'short',year:'2-digit'});
+      porMes[mes]=(porMes[mes]||0)+(data.gastos||[]).reduce((s,g)=>s+g.monto,0);
+    }
+  });
+  const topCat=Object.entries(porCat).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const topAmigo=Object.entries(personas_freq).sort((a,b)=>b[1]-a[1])[0];
+  const meses=Object.entries(porMes).reverse().slice(0,6);
+
+  document.getElementById('statsContent').innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+      <div class="stat-card"><div class="stat-label">Total cuentas</div><div class="stat-val">${totalCuentas}</div></div>
+      <div class="stat-card"><div class="stat-label">Total gastado</div><div class="stat-val">$${fmt(totalGastado)}</div></div>
+      ${topAmigo?`<div class="stat-card" style="grid-column:1/-1"><div class="stat-label">Con quien mas salis</div><div class="stat-val" style="font-size:18px">${topAmigo[0]} (${topAmigo[1]}x)</div></div>`:''}
+    </div>
+    <div style="font-size:13px;font-weight:600;color:#0c4a6e;margin-bottom:8px">Top categorias</div>
+    ${topCat.map(([c,v])=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #e8f0f7">
+        <span style="font-size:14px">${c}</span>
+        <span style="font-weight:700;color:#0c4a6e">$${fmt(v)}</span>
+      </div>`).join('')}
+    ${meses.length>1?`
+    <div style="font-size:13px;font-weight:600;color:#0c4a6e;margin:14px 0 8px">Gasto por mes</div>
+    <div style="position:relative;height:160px"><canvas id="chartMeses"></canvas></div>`:''}
+  `;
+  if(meses.length>1){
+    new Chart(document.getElementById('chartMeses').getContext('2d'),{
+      type:'bar',
+      data:{
+        labels:meses.map(m=>m[0]),
+        datasets:[{label:'Total $',data:meses.map(m=>Math.round(m[1])),backgroundColor:'#378ADD',borderRadius:5}]
+      },
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+        scales:{y:{ticks:{callback:v=>'$'+Math.round(v).toLocaleString('es-AR'),font:{size:10}},grid:{color:'#e0ecf5'}},
+        x:{ticks:{font:{size:11}},grid:{display:false}}}}
+    });
+  }
 }
 
 window.verResumen=(btn)=>{
@@ -105,79 +274,105 @@ window.verResumen=(btn)=>{
   document.getElementById('modalHistorial').style.display='flex';
 };
 window.cerrarModal=()=>{document.getElementById('modalHistorial').style.display='none';};
+window.cerrarModalImg=()=>{document.getElementById('modalImagen').style.display='none';};
+
+// ── Modo oscuro ──
+function applyDarkMode(){
+  const dark=window.matchMedia('(prefers-color-scheme: dark)').matches;
+  document.documentElement.setAttribute('data-theme',dark?'dark':'light');
+}
+applyDarkMode();
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',applyDarkMode);
+
+// Init
+(async()=>{if(await checkPublicView())return;})();
 </script>
 
 <style>
+:root{
+  --bg:#e8f4fb;--card:#fff;--border:#b8d9ee;--border2:#d0eaf7;
+  --primary:#0c4a6e;--primary2:#0a3d5c;--text:#1a1a1a;--muted:#4a7a9b;
+  --chip-bg:#e0f0f9;--chip-color:#0a3d5c;--gasto-bg:#f2f9fd;
+  --input-bg:#fff;--summary-bg:#f2f9fd;
+}
+[data-theme=dark]{
+  --bg:#0f1f2e;--card:#1a2e40;--border:#1e4060;--border2:#1a3550;
+  --primary:#378ADD;--primary2:#4a96e8;--text:#e8f4fb;--muted:#7ab8d9;
+  --chip-bg:#1a3550;--chip-color:#cde8f7;--gasto-bg:#162535;
+  --input-bg:#1a2e40;--summary-bg:#162535;
+}
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:system-ui,sans-serif;font-size:16px;background:#e8f4fb;color:#1a1a1a;min-height:100vh}
+body{font-family:system-ui,sans-serif;font-size:16px;background:var(--bg);color:var(--text);min-height:100vh;transition:background .2s,color .2s}
 #loginScreen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:24px;text-align:center}
-.login-card{background:#fff;border-radius:16px;border:1px solid #b8d9ee;padding:36px 28px;max-width:340px;width:100%}
+.login-card{background:var(--card);border-radius:16px;border:1px solid var(--border);padding:36px 28px;max-width:340px;width:100%}
 .login-logo{font-size:42px;margin-bottom:8px}
-.login-title{font-size:22px;font-weight:700;color:#0c4a6e;margin-bottom:6px}
-.login-sub{font-size:14px;color:#4a7a9b;margin-bottom:28px;line-height:1.5}
-.btn-google{display:flex;align-items:center;justify-content:center;gap:10px;background:#fff;border:1.5px solid #b8d9ee;border-radius:10px;padding:12px 20px;font-size:15px;font-weight:600;color:#0c4a6e;cursor:pointer;width:100%;transition:background .15s}
-.btn-google:hover{background:#e0f0f9}
+.login-title{font-size:22px;font-weight:700;color:var(--primary);margin-bottom:6px}
+.login-sub{font-size:14px;color:var(--muted);margin-bottom:28px;line-height:1.5}
+.btn-google{display:flex;align-items:center;justify-content:center;gap:10px;background:var(--card);border:1.5px solid var(--border);border-radius:10px;padding:12px 20px;font-size:15px;font-weight:600;color:var(--primary);cursor:pointer;width:100%;transition:background .15s}
 .btn-google img{width:20px;height:20px}
 #mainApp{display:none}
 .app{max-width:600px;margin:0 auto;padding:12px}
-.topbar{display:flex;align-items:center;justify-content:space-between;background:#0c4a6e;border-radius:12px;padding:10px 14px;margin-bottom:14px}
+.topbar{display:flex;align-items:center;justify-content:space-between;background:var(--primary);border-radius:12px;padding:10px 14px;margin-bottom:14px}
 .topbar-left{display:flex;align-items:center;gap:10px}
 .topbar-title{color:#fff;font-size:16px;font-weight:700}
 .avatar{width:32px;height:32px;border-radius:50%;border:2px solid #7ab8d9;object-fit:cover}
 .user-name{color:#cde8f7;font-size:13px}
 .btn-logout{background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer}
-.btn-logout:hover{background:rgba(255,255,255,.25)}
-.tabs{display:flex;gap:6px;margin-bottom:14px}
-.tab{flex:1;padding:9px;border-radius:8px;border:1px solid #b8d9ee;background:#fff;color:#4a7a9b;font-size:14px;font-weight:600;cursor:pointer;text-align:center;transition:all .15s}
-.tab.active{background:#0c4a6e;color:#fff;border-color:#0c4a6e}
-.card{background:#fff;border-radius:12px;border:1px solid #b8d9ee;padding:16px;margin-bottom:14px}
-.section-title{font-size:15px;font-weight:600;color:#0c4a6e;margin-bottom:12px;border-bottom:1px solid #d0eaf7;padding-bottom:6px}
-.step-badge{display:inline-block;background:#0c4a6e;color:#fff;border-radius:50%;width:22px;height:22px;text-align:center;line-height:22px;font-size:12px;font-weight:700;margin-right:8px}
-input[type=text],input[type=number],select,textarea{width:100%;padding:9px 11px;border:1px solid #b8d9ee;border-radius:8px;font-size:15px;outline:none;background:#fff;color:#1a1a1a;transition:border-color .2s;font-family:inherit}
+.tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+.tab{flex:1;min-width:80px;padding:8px 6px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;text-align:center;transition:all .15s}
+.tab.active{background:var(--primary);color:#fff;border-color:var(--primary)}
+.card{background:var(--card);border-radius:12px;border:1px solid var(--border);padding:16px;margin-bottom:14px}
+.section-title{font-size:15px;font-weight:600;color:var(--primary);margin-bottom:12px;border-bottom:1px solid var(--border2);padding-bottom:6px}
+.step-badge{display:inline-block;background:var(--primary);color:#fff;border-radius:50%;width:22px;height:22px;text-align:center;line-height:22px;font-size:12px;font-weight:700;margin-right:8px}
+input[type=text],input[type=number],select,textarea{width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:15px;outline:none;background:var(--input-bg);color:var(--text);transition:border-color .2s;font-family:inherit}
 textarea{resize:vertical;min-height:48px}
-input:focus,select:focus,textarea:focus{border-color:#0c4a6e}
+input:focus,select:focus,textarea:focus{border-color:var(--primary)}
 .row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
-.row input[type=text]{flex:1}
+.row input{flex:1}
 .btn{padding:9px 16px;border-radius:8px;border:none;cursor:pointer;font-size:14px;font-weight:600;transition:background .15s}
-.btn-primary{background:#0c4a6e;color:#fff}
-.btn-primary:hover{background:#0a3d5c}
-.btn-secondary{background:#e0f0f9;color:#0c4a6e;border:1px solid #b8d9ee}
-.btn-secondary:hover{background:#cde6f5}
+.btn-primary{background:var(--primary);color:#fff}
+.btn-primary:hover{background:var(--primary2)}
+.btn-secondary{background:var(--chip-bg);color:var(--primary);border:1px solid var(--border)}
 .btn-danger{background:#fceaea;color:#b91c1c;border:1px solid #f5c2c2}
-.btn-danger:hover{background:#f5c2c2}
 .btn-sm{padding:5px 10px;font-size:13px}
 .btn-full{width:100%}
-.tag{display:inline-flex;align-items:center;gap:6px;background:#e0f0f9;color:#0a3d5c;border-radius:20px;padding:4px 10px;font-size:13px;margin:3px}
+.tag{display:inline-flex;align-items:center;gap:6px;background:var(--chip-bg);color:var(--chip-color);border-radius:20px;padding:4px 10px;font-size:13px;margin:3px}
 .tag button{background:none;border:none;cursor:pointer;color:#b91c1c;font-size:15px;line-height:1;padding:0}
-.gasto-item{background:#f2f9fd;border:1px solid #b8d9ee;border-radius:8px;padding:10px 12px;margin-bottom:8px}
+.gasto-item{background:var(--gasto-bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px}
 .gasto-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
 .participantes-grid{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
-.part-chip{background:#fff;border:1px solid #b8d9ee;border-radius:16px;padding:4px 10px;font-size:13px;cursor:pointer;transition:all .15s;user-select:none}
-.part-chip.selected{background:#0c4a6e;color:#fff;border-color:#0c4a6e}
-.result-person{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #d0eaf7}
+.part-chip{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:4px 10px;font-size:13px;cursor:pointer;transition:all .15s;user-select:none;color:var(--text)}
+.part-chip.selected{background:var(--primary);color:#fff;border-color:var(--primary)}
+.result-person{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border2)}
 .result-person:last-child{border-bottom:none}
 .result-amount{font-size:16px;font-weight:700}
 .positivo{color:#15803d}
 .negativo{color:#dc2626}
 .neutro{color:#888;font-weight:400;font-size:14px}
-.transfer-row{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#fff;border:1px solid #b8d9ee;border-radius:8px;margin-bottom:6px;font-size:14px;flex-wrap:wrap}
+.transfer-row{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--card);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;font-size:14px;flex-wrap:wrap}
 .transfer-amount{font-weight:700;color:#dc2626;margin-left:auto}
-.summary-box{background:#f2f9fd;border:1px solid #b8d9ee;border-radius:10px;padding:14px;font-size:13px;line-height:1.8;white-space:pre-wrap;word-break:break-word;max-height:240px;overflow-y:auto}
-.share-btns{display:flex;gap:8px;margin-top:10px}
-.share-btns .btn{flex:1}
-.total-chip{background:#e0f0f9;color:#0c4a6e;border-radius:20px;padding:3px 12px;font-size:13px;font-weight:600;white-space:nowrap}
+.summary-box{background:var(--summary-bg);border:1px solid var(--border);border-radius:10px;padding:14px;font-size:13px;line-height:1.8;white-space:pre-wrap;word-break:break-word;max-height:220px;overflow-y:auto}
+.share-btns{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.share-btns .btn{flex:1;min-width:80px}
+.total-chip{background:var(--chip-bg);color:var(--primary);border-radius:20px;padding:3px 12px;font-size:13px;font-weight:600;white-space:nowrap}
 .empty-state{text-align:center;color:#999;font-size:14px;padding:20px 0}
-.hist-item{background:#f2f9fd;border:1px solid #b8d9ee;border-radius:10px;padding:12px 14px;margin-bottom:10px}
+.hist-item{background:var(--gasto-bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px}
 .hist-header{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
-.hist-titulo{font-size:14px;font-weight:700;color:#0c4a6e}
-.hist-fecha{font-size:12px;color:#4a7a9b;margin-top:2px}
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:999;align-items:center;justify-content:center;padding:16px}
-.modal-box{background:#fff;border-radius:14px;padding:20px;max-width:520px;width:100%;max-height:80vh;display:flex;flex-direction:column;gap:12px}
-.modal-title{font-size:15px;font-weight:600;color:#0c4a6e}
-.modal-body{font-size:13px;line-height:1.8;white-space:pre-wrap;overflow-y:auto;flex:1;background:#f2f9fd;border:1px solid #b8d9ee;border-radius:8px;padding:12px}
-.cat-chip{background:#e0f0f9;color:#0c4a6e;border-radius:16px;padding:4px 10px;font-size:13px;display:inline-flex;align-items:center;gap:5px;margin:2px}
+.hist-titulo{font-size:14px;font-weight:700;color:var(--primary)}
+.hist-fecha{font-size:12px;color:var(--muted);margin-top:2px}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:999;align-items:center;justify-content:center;padding:16px}
+.modal-box{background:var(--card);border-radius:14px;padding:20px;max-width:520px;width:100%;max-height:82vh;display:flex;flex-direction:column;gap:12px}
+.modal-title{font-size:15px;font-weight:600;color:var(--primary)}
+.modal-body{font-size:13px;line-height:1.8;white-space:pre-wrap;overflow-y:auto;flex:1;background:var(--summary-bg);border:1px solid var(--border);border-radius:8px;padding:12px;color:var(--text)}
+.cat-chip{background:var(--chip-bg);color:var(--primary);border-radius:16px;padding:4px 10px;font-size:13px;display:inline-flex;align-items:center;gap:5px;margin:2px}
 .cat-chip button{background:none;border:none;cursor:pointer;color:#b91c1c;font-size:13px;padding:0;line-height:1}
 .chart-wrap{position:relative;height:200px;margin-top:14px}
+.stat-card{background:var(--gasto-bg);border-radius:10px;padding:12px;text-align:center}
+.stat-label{font-size:12px;color:var(--muted);margin-bottom:4px}
+.stat-val{font-size:22px;font-weight:700;color:var(--primary)}
+.link-box{background:var(--gasto-bg);border:1px solid var(--border);border-radius:8px;padding:10px;margin-top:10px;display:none}
+.link-box input{font-size:12px;color:var(--muted);background:transparent;border:none;width:100%;outline:none}
+#cardResumen{background:#fff;border-radius:16px;padding:20px;font-family:system-ui,sans-serif;color:#1a1a1a;min-width:320px}
 #step2,#step3,#step4{display:none}
 </style>
 </head>
@@ -187,7 +382,7 @@ input:focus,select:focus,textarea:focus{border-color:#0c4a6e}
   <div class="login-card">
     <div class="login-logo">💰</div>
     <div class="login-title">Cuentas Claras</div>
-    <div class="login-sub">Dividi gastos entre amigos, familia y companeros. Tu historial siempre disponible.</div>
+    <div class="login-sub">Dividi gastos entre amigos, familia y companeros.</div>
     <button class="btn-google" onclick="loginGoogle()">
       <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google">
       Continuar con Google
@@ -197,28 +392,33 @@ input:focus,select:focus,textarea:focus{border-color:#0c4a6e}
 
 <div id="mainApp">
 <div class="app">
-
   <div class="topbar">
     <div class="topbar-left">
-      <img class="avatar" id="userAvatar" src="" alt="avatar">
-      <div>
-        <div class="topbar-title">Cuentas Claras</div>
-        <div class="user-name" id="userName"></div>
-      </div>
+      <img class="avatar" id="userAvatar" src="" alt="">
+      <div><div class="topbar-title">Cuentas Claras</div><div class="user-name" id="userName"></div></div>
     </div>
     <button class="btn-logout" onclick="logout()">Salir</button>
   </div>
 
   <div class="tabs">
-    <button class="tab active" id="tabBtnNueva" onclick="switchTab('Nueva')">+ Nueva cuenta</button>
+    <button class="tab active" id="tabBtnNueva" onclick="switchTab('Nueva')">+ Nueva</button>
     <button class="tab" id="tabBtnHistorial" onclick="switchTab('Historial')">Historial</button>
+    <button class="tab" id="tabBtnStats" onclick="switchTab('Stats')">Estadisticas</button>
   </div>
 
+  <!-- NUEVA CUENTA -->
   <div id="tabNueva">
-
     <div class="card" id="step1">
       <div class="section-title"><span class="step-badge">1</span>Datos de la reunion</div>
-      <input type="text" id="inputTitulo" placeholder="Nombre (ej: Asado del sabado, Turno Padel...)" maxlength="50" style="margin-bottom:10px"/>
+      <input type="text" id="inputTitulo" placeholder="Nombre (ej: Asado, Turno Padel...)" maxlength="50" style="margin-bottom:10px"/>
+
+      <!-- Grupos frecuentes -->
+      <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+        <select id="selGrupo" style="flex:2;min-width:140px" onchange="cargarGrupo()"></select>
+        <button class="btn btn-secondary btn-sm" onclick="guardarGrupo()" title="Guardar grupo actual">Guardar grupo</button>
+        <button class="btn btn-danger btn-sm" onclick="eliminarGrupo()" title="Eliminar grupo">&#128465;</button>
+      </div>
+
       <div class="row">
         <input type="text" id="inputNombre" placeholder="Nombre de persona..." maxlength="30"/>
         <button class="btn btn-primary btn-sm" onclick="agregarPersona()">+ Agregar</button>
@@ -229,9 +429,8 @@ input:focus,select:focus,textarea:focus{border-color:#0c4a6e}
 
     <div class="card" id="step2">
       <div class="section-title"><span class="step-badge">2</span>Registro de gastos</div>
-
       <div style="margin-bottom:10px">
-        <div style="font-size:13px;color:#4a7a9b;margin-bottom:4px">Categoria</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:4px">Categoria</div>
         <select id="selCategoria" style="width:100%"></select>
         <div style="display:flex;gap:8px;margin-top:6px">
           <input type="text" id="inputCatCustom" placeholder="Agregar categoria nueva..." style="flex:1"/>
@@ -239,25 +438,21 @@ input:focus,select:focus,textarea:focus{border-color:#0c4a6e}
         </div>
         <div id="catsCustom" style="margin-top:6px"></div>
       </div>
-
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
         <select id="selPagador" style="flex:1;min-width:130px"></select>
         <input type="number" id="inputMonto" placeholder="Monto $" min="0" step="1" style="width:110px;flex:none"/>
       </div>
-
       <div style="margin-bottom:10px">
-        <textarea id="inputNota" placeholder="Nota opcional (ej: 2 kg vacío, Quilmes 1L...)" style="min-height:48px;font-size:13px"></textarea>
+        <textarea id="inputNota" placeholder="Nota opcional (ej: 2 kg vacio, Quilmes 1L...)" style="font-size:13px"></textarea>
       </div>
-
       <div style="margin-bottom:10px">
-        <div style="font-size:13px;color:#4a7a9b;margin-bottom:5px">Quienes participan en este gasto?</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:5px">Quienes participan?</div>
         <div id="chipParticipantes" class="participantes-grid"></div>
         <div style="margin-top:6px;display:flex;gap:6px">
           <button class="btn btn-secondary btn-sm" onclick="selectTodos(true)">Todos</button>
           <button class="btn btn-secondary btn-sm" onclick="selectTodos(false)">Ninguno</button>
         </div>
       </div>
-
       <button class="btn btn-primary btn-full" onclick="agregarGasto()">+ Agregar gasto</button>
       <div id="listaGastos" style="margin-top:14px"></div>
       <button class="btn btn-primary btn-full" style="margin-top:10px" onclick="calcular()">Calcular cuentas &rarr;</button>
@@ -267,7 +462,7 @@ input:focus,select:focus,textarea:focus{border-color:#0c4a6e}
       <div class="section-title"><span class="step-badge">3</span>Resultado final</div>
       <div id="resultadoBalance"></div>
       <div style="margin-top:12px">
-        <div style="font-size:14px;font-weight:600;color:#0c4a6e;margin-bottom:6px">Transferencias a realizar:</div>
+        <div style="font-size:14px;font-weight:600;color:var(--primary);margin-bottom:6px">Transferencias:</div>
         <div id="resultadoTransferencias"></div>
       </div>
       <div class="chart-wrap"><canvas id="chartGastos"></canvas></div>
@@ -278,14 +473,22 @@ input:focus,select:focus,textarea:focus{border-color:#0c4a6e}
       <div class="summary-box" id="resumenTexto"></div>
       <div class="share-btns">
         <button class="btn btn-secondary" onclick="compartirWhatsApp()">WhatsApp</button>
+        <button class="btn btn-secondary" onclick="generarImagen()">Imagen</button>
         <button class="btn btn-primary" onclick="descargarPDF()">PDF</button>
+      </div>
+      <div class="link-box" id="boxLink">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Link para compartir (sin login):</div>
+        <div style="display:flex;gap:6px">
+          <input type="text" id="linkCompartible" readonly style="font-size:12px"/>
+          <button class="btn btn-secondary btn-sm" onclick="copiarLinkActual()">Copiar</button>
+        </div>
       </div>
       <button class="btn btn-secondary btn-full" style="margin-top:8px" onclick="guardarEnHistorial()">Guardar en historial</button>
       <button class="btn btn-secondary btn-full" style="margin-top:8px;font-size:13px" onclick="reiniciar()">Nueva cuenta</button>
     </div>
-
   </div>
 
+  <!-- HISTORIAL -->
   <div id="tabHistorial" style="display:none">
     <div class="card">
       <div class="section-title">Mis cuentas guardadas</div>
@@ -293,14 +496,34 @@ input:focus,select:focus,textarea:focus{border-color:#0c4a6e}
     </div>
   </div>
 
+  <!-- ESTADISTICAS -->
+  <div id="tabStats" style="display:none">
+    <div class="card">
+      <div class="section-title">Mis estadisticas</div>
+      <div id="statsContent"><div class="empty-state">Cargando...</div></div>
+    </div>
+  </div>
 </div>
 </div>
 
+<!-- Modal resumen -->
 <div class="modal-overlay" id="modalHistorial">
   <div class="modal-box">
-    <div class="modal-title">Resumen de cuenta</div>
+    <div class="modal-title">Resumen</div>
     <div class="modal-body" id="resumenHistorial"></div>
     <button class="btn btn-primary" onclick="cerrarModal()">Cerrar</button>
+  </div>
+</div>
+
+<!-- Modal imagen -->
+<div class="modal-overlay" id="modalImagen">
+  <div class="modal-box" style="align-items:center">
+    <div class="modal-title">Imagen para compartir</div>
+    <div id="cardResumen"></div>
+    <div style="display:flex;gap:8px;margin-top:4px;width:100%">
+      <button class="btn btn-primary btn-full" onclick="descargarImagen()">Descargar imagen</button>
+      <button class="btn btn-secondary btn-full" onclick="cerrarModalImg()">Cerrar</button>
+    </div>
   </div>
 </div>
 
@@ -308,67 +531,44 @@ input:focus,select:focus,textarea:focus{border-color:#0c4a6e}
 let personas=[],gastos=[],participantesSeleccionados=new Set();
 let lastSaldo={},lastTransfers=[];
 let chartInstance=null;
-
-// ── Categorias base ampliadas ──
-const CATS_BASE=[
-  'Carne','Verdura','Bebidas','Gaseosa','Cerveza',
-  'Postre','Minuta','Cancha/Turno',
-  'Condimentos/Insumos','Varios'
-];
+const CATS_BASE=['Carne','Verdura','Bebidas','Gaseosa','Cerveza','Postre','Minuta','Cancha/Turno','Condimentos/Insumos','Varios'];
 let catsExtra=[];
 
 function getCats(){return [...CATS_BASE,...catsExtra];}
-
 function renderSelectCats(){
   const sel=document.getElementById('selCategoria');
   const cur=sel.value;
   sel.innerHTML=getCats().map(c=>`<option value="${c}">${c}</option>`).join('');
   if(cur&&getCats().includes(cur))sel.value=cur;
 }
-
 function agregarCategoria(){
   const inp=document.getElementById('inputCatCustom');
   const v=inp.value.trim();
   if(!v)return;
-  if(getCats().map(c=>c.toLowerCase()).includes(v.toLowerCase())){
-    alert('Esa categoria ya existe.');return;
-  }
-  catsExtra.push(v);
-  inp.value='';
-  renderSelectCats();
-  renderCatsCustom();
-  // Seleccionar la nueva categoria automaticamente
+  if(getCats().map(c=>c.toLowerCase()).includes(v.toLowerCase())){alert('Esa categoria ya existe.');return;}
+  catsExtra.push(v);inp.value='';
+  renderSelectCats();renderCatsCustom();
   document.getElementById('selCategoria').value=v;
 }
-
 function renderCatsCustom(){
   const c=document.getElementById('catsCustom');
-  if(!catsExtra.length){c.innerHTML='';return;}
-  c.innerHTML=catsExtra.map((cat,i)=>
-    `<span class="cat-chip">${cat}<button onclick="quitarCat(${i})">&times;</button></span>`
-  ).join('');
+  c.innerHTML=catsExtra.map((cat,i)=>`<span class="cat-chip">${cat}<button onclick="quitarCat(${i})">&times;</button></span>`).join('');
 }
-
-function quitarCat(i){
-  catsExtra.splice(i,1);
-  renderSelectCats();
-  renderCatsCustom();
-}
+function quitarCat(i){catsExtra.splice(i,1);renderSelectCats();renderCatsCustom();}
 
 function switchTab(t){
-  document.getElementById('tabNueva').style.display=t==='Nueva'?'block':'none';
-  document.getElementById('tabHistorial').style.display=t==='Historial'?'block':'none';
-  document.getElementById('tabBtnNueva').className='tab'+(t==='Nueva'?' active':'');
-  document.getElementById('tabBtnHistorial').className='tab'+(t==='Historial'?' active':'');
+  ['Nueva','Historial','Stats'].forEach(n=>{
+    document.getElementById('tab'+n).style.display=t===n?'block':'none';
+    document.getElementById('tabBtn'+n).className='tab'+(t===n?' active':'');
+  });
+  if(t==='Stats')loadStats();
 }
 
 function agregarPersona(){
   const inp=document.getElementById('inputNombre');
   const nom=inp.value.trim();
   if(!nom)return;
-  if(personas.map(p=>p.toLowerCase()).includes(nom.toLowerCase())){
-    alert('Persona ya agregada.');return;
-  }
+  if(personas.map(p=>p.toLowerCase()).includes(nom.toLowerCase())){alert('Persona ya agregada.');return;}
   personas.push(nom);inp.value='';renderNombres();
 }
 document.getElementById('inputNombre').addEventListener('keydown',e=>{if(e.key==='Enter')agregarPersona();});
@@ -377,9 +577,7 @@ document.getElementById('inputCatCustom').addEventListener('keydown',e=>{if(e.ke
 function renderNombres(){
   const c=document.getElementById('listaNombres');
   if(!personas.length){c.innerHTML='<div class="empty-state">Aun no hay personas</div>';return;}
-  c.innerHTML=personas.map((p,i)=>
-    `<span class="tag">${p}<button onclick="quitarPersona(${i})">&times;</button></span>`
-  ).join('');
+  c.innerHTML=personas.map((p,i)=>`<span class="tag">${p}<button onclick="quitarPersona(${i})">&times;</button></span>`).join('');
 }
 function quitarPersona(i){personas.splice(i,1);renderNombres();}
 
@@ -387,22 +585,15 @@ function pasarStep2(){
   if(personas.length<2){alert('Agrega al menos 2 personas.');return;}
   document.getElementById('step2').style.display='block';
   renderSelectCats();
-  document.getElementById('selPagador').innerHTML=
-    personas.map(p=>`<option value="${p}">${p} pago</option>`).join('');
+  document.getElementById('selPagador').innerHTML=personas.map(p=>`<option value="${p}">${p} pago</option>`).join('');
   participantesSeleccionados=new Set(personas);
-  document.getElementById('chipParticipantes').innerHTML=
-    personas.map(p=>`<span class="part-chip selected" id="chip_${CSS.escape(p)}" onclick="toggleChip('${p}')">${p}</span>`).join('');
+  document.getElementById('chipParticipantes').innerHTML=personas.map(p=>`<span class="part-chip selected" id="chip_${CSS.escape(p)}" onclick="toggleChip('${p}')">${p}</span>`).join('');
   document.getElementById('step2').scrollIntoView({behavior:'smooth'});
 }
 
 function toggleChip(p){
-  if(participantesSeleccionados.has(p)){
-    participantesSeleccionados.delete(p);
-    document.getElementById('chip_'+CSS.escape(p)).classList.remove('selected');
-  } else {
-    participantesSeleccionados.add(p);
-    document.getElementById('chip_'+CSS.escape(p)).classList.add('selected');
-  }
+  if(participantesSeleccionados.has(p)){participantesSeleccionados.delete(p);document.getElementById('chip_'+CSS.escape(p)).classList.remove('selected');}
+  else{participantesSeleccionados.add(p);document.getElementById('chip_'+CSS.escape(p)).classList.add('selected');}
 }
 function selectTodos(v){
   personas.forEach(p=>{
@@ -413,7 +604,6 @@ function selectTodos(v){
 }
 
 function agregarGasto(){
-  // Leer categoria directamente del selector en el momento del click
   const sel=document.getElementById('selCategoria');
   const cat=sel.options[sel.selectedIndex].value;
   const pag=document.getElementById('selPagador').value;
@@ -432,38 +622,27 @@ function renderGastos(){
   const c=document.getElementById('listaGastos');
   if(!gastos.length){c.innerHTML='';return;}
   const total=gastos.reduce((s,g)=>s+g.monto,0);
-  c.innerHTML=
-    `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <span style="font-size:13px;color:#4a7a9b">Gastos registrados (${gastos.length})</span>
-      <span class="total-chip">${fmt(total)}</span>
-    </div>`+
-    gastos.map((g,i)=>`
-      <div class="gasto-item" id="gastoItem_${i}">
-        <div class="gasto-header">
-          <span style="font-weight:700;font-size:14px">${g.cat}</span>
-          <div style="display:flex;gap:6px;align-items:center">
-            <span style="font-weight:700;color:#0c4a6e">${fmt(g.monto)}</span>
-            <button class="btn btn-secondary btn-sm" onclick="editarGasto(${i})" title="Editar">&#9998;</button>
-            <button class="btn btn-danger btn-sm" onclick="quitarGasto(${i})">&times;</button>
-          </div>
-        </div>
-        <div style="font-size:13px;color:#444">
-          Pago: <strong>${g.pag}</strong>
-          ${g.nota?` &middot; <span style="color:#4a7a9b;font-style:italic">${g.nota}</span>`:''}
-        </div>
-        <div style="font-size:12px;color:#4a7a9b;margin-top:3px">
-          Participan (${g.parts.length}): ${g.parts.join(', ')}
-        </div>
-      </div>`
-    ).join('');
+  c.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+    <span style="font-size:13px;color:var(--muted)">Gastos (${gastos.length})</span>
+    <span class="total-chip">$${fmt(total)}</span></div>`+
+  gastos.map((g,i)=>`<div class="gasto-item">
+    <div class="gasto-header">
+      <span style="font-weight:700;font-size:14px">${g.cat}</span>
+      <div style="display:flex;gap:6px;align-items:center">
+        <span style="font-weight:700;color:var(--primary)">$${fmt(g.monto)}</span>
+        <button class="btn btn-secondary btn-sm" onclick="editarGasto(${i})" title="Editar">&#9998;</button>
+        <button class="btn btn-danger btn-sm" onclick="quitarGasto(${i})">&times;</button>
+      </div>
+    </div>
+    <div style="font-size:13px;color:var(--text)">Pago: <strong>${g.pag}</strong>${g.nota?` &middot; <span style="color:var(--muted);font-style:italic">${g.nota}</span>`:''}</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:3px">Participan (${g.parts.length}): ${g.parts.join(', ')}</div>
+  </div>`).join('');
 }
-function quitarGasto(i){gastos.splice(i,1);renderGastos();}
 
+function quitarGasto(i){gastos.splice(i,1);renderGastos();}
 function editarGasto(i){
   const g=gastos[i];
-  // Cargar valores en el formulario
   const sel=document.getElementById('selCategoria');
-  // Si la categoria no existe en el select, agregarla temporalmente
   if(![...sel.options].map(o=>o.value).includes(g.cat)){
     if(!catsExtra.includes(g.cat)){catsExtra.push(g.cat);renderSelectCats();renderCatsCustom();}
   }
@@ -471,72 +650,40 @@ function editarGasto(i){
   document.getElementById('selPagador').value=g.pag;
   document.getElementById('inputMonto').value=g.monto;
   document.getElementById('inputNota').value=g.nota||'';
-  // Restaurar chips de participantes
   participantesSeleccionados=new Set(g.parts);
   personas.forEach(p=>{
     const el=document.getElementById('chip_'+CSS.escape(p));
-    if(el){
-      if(g.parts.includes(p)){el.classList.add('selected');}
-      else{el.classList.remove('selected');}
-    }
+    if(el){g.parts.includes(p)?el.classList.add('selected'):el.classList.remove('selected');}
   });
-  // Quitar el gasto original para reemplazarlo al agregar
-  gastos.splice(i,1);
-  renderGastos();
+  gastos.splice(i,1);renderGastos();
   document.getElementById('inputMonto').focus();
   document.getElementById('step2').scrollIntoView({behavior:'smooth'});
 }
 
 function fmt(n){return Math.round(n).toLocaleString('es-AR');}
 
-// ── CALCULO CORRECTO ──
-// Cada gasto divide su monto SOLO entre quienes participan en ese gasto.
-// El pagador adelanta el dinero; se le acredita el total del gasto.
-// Cada participante debe su parte proporcional.
 function calcular(){
   if(!gastos.length){alert('Registra al menos un gasto.');return;}
-
   const saldo={};
   personas.forEach(p=>saldo[p]=0);
-
   gastos.forEach(g=>{
-    // El pagador adelanta el monto completo: saldo positivo
     saldo[g.pag]+=g.monto;
-    // Cada participante debe su parte exacta
     const share=g.monto/g.parts.length;
-    g.parts.forEach(p=>{
-      saldo[p]-=share;
-    });
+    g.parts.forEach(p=>saldo[p]-=share);
   });
-
   lastSaldo={...saldo};
 
-  // Balance
   let balHTML='';
   personas.forEach(p=>{
     const v=saldo[p];
     const cls=v>0.5?'positivo':v<-0.5?'negativo':'neutro';
-    const lbl=v>0.5
-      ?`a recibir $${fmt(v)}`
-      :v<-0.5?`debe pagar $${fmt(Math.abs(v))}`
-      :'al dia';
-    balHTML+=`<div class="result-person">
-      <span style="font-size:15px;font-weight:500">${p}</span>
-      <span class="result-amount ${cls}">${lbl}</span>
-    </div>`;
+    const lbl=v>0.5?`a recibir $${fmt(v)}`:v<-0.5?`debe pagar $${fmt(Math.abs(v))}`:'al dia';
+    balHTML+=`<div class="result-person"><span style="font-size:15px;font-weight:500">${p}</span><span class="result-amount ${cls}">${lbl}</span></div>`;
   });
   document.getElementById('resultadoBalance').innerHTML=balHTML;
 
-  // Transferencias minimas (algoritmo greedy)
-  const deudores=personas
-    .filter(p=>saldo[p]<-0.5)
-    .map(p=>({n:p,v:Math.abs(saldo[p])}))
-    .sort((a,b)=>b.v-a.v);
-  const acreedores=personas
-    .filter(p=>saldo[p]>0.5)
-    .map(p=>({n:p,v:saldo[p]}))
-    .sort((a,b)=>b.v-a.v);
-
+  const deudores=personas.filter(p=>saldo[p]<-0.5).map(p=>({n:p,v:Math.abs(saldo[p])})).sort((a,b)=>b.v-a.v);
+  const acreedores=personas.filter(p=>saldo[p]>0.5).map(p=>({n:p,v:saldo[p]})).sort((a,b)=>b.v-a.v);
   lastTransfers=[];
   let di=0,ai=0;
   while(di<deudores.length&&ai<acreedores.length){
@@ -544,110 +691,114 @@ function calcular(){
     const pago=Math.min(d.v,a.v);
     if(pago>0.5)lastTransfers.push({de:d.n,a:a.n,monto:pago});
     d.v-=pago;a.v-=pago;
-    if(d.v<0.5)di++;
-    if(a.v<0.5)ai++;
+    if(d.v<0.5)di++;if(a.v<0.5)ai++;
   }
 
   let trHTML='';
-  if(!lastTransfers.length){
-    trHTML='<div class="empty-state">Nadie debe nada! &#127881;</div>';
-  } else {
-    lastTransfers.forEach(t=>{
-      trHTML+=`<div class="transfer-row">
-        <strong>${t.de}</strong>
-        <span style="color:#4a7a9b;font-size:18px">&#8594;</span>
-        <strong>${t.a}</strong>
-        <span class="transfer-amount">$${fmt(t.monto)}</span>
-      </div>`;
-    });
-  }
+  if(!lastTransfers.length)trHTML='<div class="empty-state">Nadie debe nada!</div>';
+  else lastTransfers.forEach(t=>{trHTML+=`<div class="transfer-row"><strong>${t.de}</strong><span style="color:var(--muted);margin:0 4px">&#8594;</span><strong>${t.a}</strong><span class="transfer-amount">$${fmt(t.monto)}</span></div>`;});
   document.getElementById('resultadoTransferencias').innerHTML=trHTML;
 
-  // Grafico: consumo real vs lo que pago cada persona
-  const consumo={};
-  const pagado={};
+  const consumo={},pagado={};
   personas.forEach(p=>{consumo[p]=0;pagado[p]=0;});
   gastos.forEach(g=>{
     pagado[g.pag]+=g.monto;
     const share=g.monto/g.parts.length;
     g.parts.forEach(p=>consumo[p]+=share);
   });
-
   if(chartInstance)chartInstance.destroy();
-  const ctx=document.getElementById('chartGastos').getContext('2d');
-  chartInstance=new Chart(ctx,{
+  chartInstance=new Chart(document.getElementById('chartGastos').getContext('2d'),{
     type:'bar',
-    data:{
-      labels:personas,
-      datasets:[
-        {label:'Consumio ($)',data:personas.map(p=>Math.round(consumo[p])),backgroundColor:'#378ADD',borderRadius:5,borderSkipped:false},
-        {label:'Pago ($)',data:personas.map(p=>Math.round(pagado[p])),backgroundColor:'#0c4a6e',borderRadius:5,borderSkipped:false}
-      ]
-    },
-    options:{
-      responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{labels:{font:{size:12},color:'#1a1a1a'}}},
-      scales:{
-        y:{ticks:{callback:v=>'$'+Math.round(v).toLocaleString('es-AR'),font:{size:11},color:'#555'},grid:{color:'#e0ecf5'}},
-        x:{ticks:{font:{size:12},color:'#1a1a1a'},grid:{display:false}}
-      }
-    }
+    data:{labels:personas,datasets:[
+      {label:'Consumio',data:personas.map(p=>Math.round(consumo[p])),backgroundColor:'#378ADD',borderRadius:5,borderSkipped:false},
+      {label:'Pago',data:personas.map(p=>Math.round(pagado[p])),backgroundColor:'#0c4a6e',borderRadius:5,borderSkipped:false}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{labels:{font:{size:12},color:getComputedStyle(document.body).color}}},
+      scales:{y:{ticks:{callback:v=>'$'+Math.round(v).toLocaleString('es-AR'),font:{size:10}},grid:{color:'rgba(128,128,128,.15)'}},
+        x:{ticks:{font:{size:12}},grid:{display:false}}}}
   });
 
-  // Resumen texto — sin caracteres problematicos
   const titulo=document.getElementById('inputTitulo').value.trim()||'Sin titulo';
   const sep='--------------------------------';
   const ahora=new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
-  let txt='CUENTAS CLARAS\n';
-  txt+=titulo.toUpperCase()+'\n';
-  txt+=ahora+'\n'+sep+'\n\n';
-  txt+='PARTICIPANTES: '+personas.join(', ')+'\n\n';
-  txt+='DETALLE DE GASTOS:\n';
-  gastos.forEach(g=>{
-    txt+='- '+g.cat+': $'+fmt(g.monto);
-    txt+=' | pago: '+g.pag;
-    if(g.nota)txt+=' ('+g.nota+')';
-    txt+=' | participan: '+g.parts.join(', ')+'\n';
-  });
+  let txt='CUENTAS CLARAS\n'+titulo.toUpperCase()+'\n'+ahora+'\n'+sep+'\n\nPARTICIPANTES: '+personas.join(', ')+'\n\nDETALLE DE GASTOS:\n';
+  gastos.forEach(g=>{txt+='- '+g.cat+': $'+fmt(g.monto)+' | pago: '+g.pag+(g.nota?' ('+g.nota+')':'')+' | participan: '+g.parts.join(', ')+'\n';});
   const total=gastos.reduce((s,g)=>s+g.monto,0);
-  txt+='\nTOTAL GENERAL: $'+fmt(total)+'\n'+sep+'\n\n';
-  txt+='BALANCE:\n';
-  personas.forEach(p=>{
-    const v=saldo[p];
-    txt+=p+': '+(v>0.5?'a recibir $'+fmt(v):v<-0.5?'debe pagar $'+fmt(Math.abs(v)):'al dia')+'\n';
-  });
+  txt+='\nTOTAL: $'+fmt(total)+'\n'+sep+'\n\nBALANCE:\n';
+  personas.forEach(p=>{const v=saldo[p];txt+=p+': '+(v>0.5?'a recibir $'+fmt(v):v<-0.5?'debe pagar $'+fmt(Math.abs(v)):'al dia')+'\n';});
   txt+='\nTRANSFERENCIAS:\n';
-  if(!lastTransfers.length){
-    txt+='Nadie debe nada.\n';
-  } else {
-    lastTransfers.forEach(t=>{txt+=t.de+' -> '+t.a+': $'+fmt(t.monto)+'\n';});
-  }
+  if(!lastTransfers.length)txt+='Nadie debe nada.\n';
+  else lastTransfers.forEach(t=>{txt+=t.de+' -> '+t.a+': $'+fmt(t.monto)+'\n';});
   txt+='\nGenerado con Cuentas Claras';
   document.getElementById('resumenTexto').textContent=txt;
 
   document.getElementById('step3').style.display='block';
   document.getElementById('step4').style.display='block';
+  document.getElementById('boxLink').style.display='none';
   document.getElementById('step3').scrollIntoView({behavior:'smooth'});
 }
 
 function guardarEnHistorial(){
   const titulo=document.getElementById('inputTitulo').value.trim()||'Sin titulo';
-  const resumen=document.getElementById('resumenTexto').textContent;
-  window.guardarCuenta({titulo,resumen,personas,gastos,saldo:lastSaldo,transfers:lastTransfers});
+  window.guardarCuenta({titulo,resumen:document.getElementById('resumenTexto').textContent,personas,gastos,saldo:lastSaldo,transfers:lastTransfers});
 }
+
+function copiarLinkActual(){
+  const val=document.getElementById('linkCompartible').value;
+  navigator.clipboard.writeText(val).then(()=>alert('Link copiado!')).catch(()=>prompt('Copia:',val));
+}
+
 function compartirWhatsApp(){
   window.open('https://wa.me/?text='+encodeURIComponent(document.getElementById('resumenTexto').textContent),'_blank');
 }
+
+function generarImagen(){
+  const titulo=document.getElementById('inputTitulo').value.trim()||'Sin titulo';
+  const total=gastos.reduce((s,g)=>s+g.monto,0);
+  let trRows='';
+  lastTransfers.forEach(t=>{
+    trRows+=`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #e8f0f7;font-size:14px">
+      <span>${t.de} &#8594; ${t.a}</span><span style="font-weight:700;color:#dc2626">$${fmt(t.monto)}</span></div>`;
+  });
+  let balRows='';
+  personas.forEach(p=>{
+    const v=lastSaldo[p]||0;
+    const color=v>0.5?'#15803d':v<-0.5?'#dc2626':'#888';
+    const lbl=v>0.5?'recibe $'+fmt(v):v<-0.5?'paga $'+fmt(Math.abs(v)):'al dia';
+    balRows+=`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #e8f0f7;font-size:14px">
+      <span>${p}</span><span style="font-weight:700;color:${color}">${lbl}</span></div>`;
+  });
+  document.getElementById('cardResumen').innerHTML=`
+    <div style="background:#0c4a6e;color:#fff;border-radius:10px 10px 0 0;padding:12px 16px;margin:-20px -20px 16px">
+      <div style="font-size:17px;font-weight:700">Cuentas Claras</div>
+      <div style="font-size:13px;opacity:.8">${titulo} &middot; Total: $${fmt(total)}</div>
+    </div>
+    <div style="margin-bottom:12px"><div style="font-size:13px;font-weight:600;color:#0c4a6e;margin-bottom:4px">Balance</div>${balRows}</div>
+    ${lastTransfers.length?`<div><div style="font-size:13px;font-weight:600;color:#0c4a6e;margin-bottom:4px">Transferencias</div>${trRows}</div>`:''}
+    <div style="font-size:11px;color:#4a7a9b;text-align:center;margin-top:12px">Generado con Cuentas Claras</div>`;
+  document.getElementById('modalImagen').style.display='flex';
+}
+
+function descargarImagen(){
+  html2canvas(document.getElementById('cardResumen'),{scale:2,backgroundColor:'#fff'}).then(canvas=>{
+    const a=document.createElement('a');
+    a.download='cuentas-claras.png';
+    a.href=canvas.toDataURL('image/png');
+    a.click();
+  });
+}
+
 function descargarPDF(){
   const {jsPDF}=window.jspdf;
   const doc=new jsPDF({unit:'pt',format:'a4'});
-  const txt=document.getElementById('resumenTexto').textContent;
-  const lines=doc.splitTextToSize(txt,480);
+  const lines=doc.splitTextToSize(document.getElementById('resumenTexto').textContent,480);
   doc.setFont('helvetica');doc.setFontSize(11);
   let y=40;
   lines.forEach(l=>{if(y>780){doc.addPage();y=40;}doc.text(l,56,y);y+=16;});
   doc.save('cuentas-claras.pdf');
 }
+
 function reiniciar(){
   personas=[];gastos=[];participantesSeleccionados=new Set();
   lastSaldo={};lastTransfers=[];catsExtra=[];
@@ -655,6 +806,7 @@ function reiniciar(){
   renderNombres();
   document.getElementById('listaGastos').innerHTML='';
   document.getElementById('catsCustom').innerHTML='';
+  document.getElementById('boxLink').style.display='none';
   if(chartInstance){chartInstance.destroy();chartInstance=null;}
   ['step2','step3','step4'].forEach(s=>document.getElementById(s).style.display='none');
   window.scrollTo({top:0,behavior:'smooth'});
