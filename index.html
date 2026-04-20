@@ -35,7 +35,6 @@ onAuthStateChanged(auth, function(u) {
     document.getElementById('un').textContent = u.displayName;
     document.getElementById('ua').src = u.photoURL;
     loadHist();
-    loadGrupos();
   } else {
     document.getElementById('ls').style.display = 'flex';
     document.getElementById('ma').style.display = 'none';
@@ -45,7 +44,6 @@ onAuthStateChanged(auth, function(u) {
 window.loginG = function() {
   signInWithPopup(auth, gp).catch(function(e) { alert('Error: ' + e.message); });
 };
-
 window.logout = function() {
   if (confirm('Cerrar sesion?')) signOut(auth);
 };
@@ -53,13 +51,10 @@ window.logout = function() {
 window.guardarCuenta = function(data) {
   if (!CU) { alert('Inicia sesion primero.'); return; }
   var obj = {
-    titulo: data.titulo,
-    personas: data.personas,
-    gastos: data.gastos,
-    saldo: data.saldo,
-    transfers: data.transfers,
-    resumen: data.resumen,
-    fecha: serverTimestamp()
+    titulo: data.titulo, modo: data.modo, lugar: data.lugar,
+    personas: data.personas, gastos: data.gastos,
+    saldo: data.saldo, transfers: data.transfers,
+    resumen: data.resumen, fecha: serverTimestamp()
   };
   addDoc(collection(db,'usuarios',CU.uid,'cuentas'), obj).then(function() {
     alert('Cuenta guardada!');
@@ -84,11 +79,12 @@ function loadHist() {
       var x = d.data();
       var fecha = x.fecha && x.fecha.toDate ? x.fecha.toDate().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}) : '';
       var total = (x.gastos||[]).reduce(function(s,g){return s+g.monto;},0);
+      var subtit = x.modo === 'lugar' ? (x.lugar||'Lugar') : (x.personas||[]).join(', ');
       var el = document.createElement('div');
       el.className = 'hi';
       el.innerHTML =
         '<div class="hh"><div><div class="ht">' + (x.titulo||'Sin titulo') + '</div>' +
-        '<div class="hf">' + fecha + ' &middot; ' + (x.personas||[]).join(', ') + '</div></div>' +
+        '<div class="hf">' + fecha + ' &middot; ' + subtit + '</div></div>' +
         '<span class="chip">$' + fmt(total) + '</span></div>' +
         '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">' +
         '<button class="btn bs sm" onclick="verRes(this)" data-res="' + encodeURIComponent(x.resumen||'') + '">Ver resumen</button>' +
@@ -103,39 +99,6 @@ window.verRes = function(btn) {
   document.getElementById('mHistorial').style.display = 'flex';
 };
 window.cerrarModal = function() { document.getElementById('mHistorial').style.display = 'none'; };
-
-function loadGrupos() {
-  if (!CU) return;
-  getDocs(collection(db,'usuarios',CU.uid,'grupos')).then(function(snap) {
-    var sel = document.getElementById('selGrupo');
-    sel.innerHTML = '<option value="">-- Cargar grupo --</option>';
-    snap.forEach(function(d) {
-      var o = document.createElement('option');
-      o.value = JSON.stringify(d.data().personas);
-      o.textContent = d.data().nombre;
-      o.setAttribute('data-id', d.id);
-      sel.appendChild(o);
-    });
-  });
-}
-
-window.cargarGrupo = function() {
-  var sel = document.getElementById('selGrupo');
-  if (!sel.value) return;
-  personas = JSON.parse(sel.value);
-  renderP();
-};
-
-window.guardarGrupo = function() {
-  if (!CU) return;
-  if (personas.length < 2) { alert('Agrega al menos 2 personas.'); return; }
-  var n = prompt('Nombre del grupo (ej: Los del padel):');
-  if (!n) return;
-  addDoc(collection(db,'usuarios',CU.uid,'grupos'), {nombre:n, personas:personas.slice()}).then(function() {
-    alert('Grupo guardado!');
-    loadGrupos();
-  }).catch(function(e) { alert('Error: ' + e.message); });
-};
 </script>
 
 <style>
@@ -203,6 +166,12 @@ input:focus,select:focus,textarea:focus{border-color:#0c4a6e}
 .cc2{background:#e0f0f9;color:#0c4a6e;border-radius:16px;padding:4px 10px;font-size:13px;display:inline-flex;align-items:center;gap:5px;margin:2px}
 .cc2 button{background:none;border:none;cursor:pointer;color:#b91c1c;font-size:13px;padding:0}
 .cw{position:relative;height:200px;margin-top:14px}
+.modo-btns{display:flex;gap:8px;margin-bottom:14px}
+.modo-btn{flex:1;padding:10px 8px;border-radius:10px;border:2px solid #b8d9ee;background:#fff;color:#4a7a9b;font-size:13px;font-weight:600;cursor:pointer;text-align:center;transition:all .15s}
+.modo-btn.activo{border-color:#0c4a6e;background:#e0f0f9;color:#0c4a6e}
+.lugar-box{background:#e8f4fb;border:1px solid #b8d9ee;border-radius:10px;padding:12px;margin-bottom:10px}
+.lugar-box .lbl{font-size:12px;font-weight:600;color:#0c4a6e;margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.lugar-icon{font-size:16px}
 .qr-box{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:4px 0}
 .qr-box img{width:130px;height:130px;border-radius:10px;border:1px solid #b8d9ee;padding:6px;background:#fff}
 .qr-txt{flex:1;min-width:150px}
@@ -226,7 +195,6 @@ input:focus,select:focus,textarea:focus{border-color:#0c4a6e}
 
 <div id="ma">
 <div class="app">
-
   <div class="tb">
     <div class="tbl">
       <img class="av" id="ua" src="" alt="">
@@ -234,7 +202,6 @@ input:focus,select:focus,textarea:focus{border-color:#0c4a6e}
     </div>
     <button class="lo" onclick="logout()">Salir</button>
   </div>
-
   <div class="tabs">
     <button class="tab active" id="tBN" onclick="swTab('N')">+ Nueva</button>
     <button class="tab" id="tBH" onclick="swTab('H')">Historial</button>
@@ -242,12 +209,31 @@ input:focus,select:focus,textarea:focus{border-color:#0c4a6e}
 
   <div id="tN">
     <div class="card" id="step1">
-      <div class="st"><span class="sb">1</span>Datos de la reunion</div>
-      <input type="text" id="iTit" placeholder="Nombre (ej: Asado, Padel...)" maxlength="50" style="margin-bottom:10px">
-      <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
-        <select id="selGrupo" style="flex:2;min-width:140px" onchange="cargarGrupo()"></select>
-        <button class="btn bs sm" onclick="guardarGrupo()">Guardar grupo</button>
+      <div class="st"><span class="sb">1</span>Tipo de cuenta</div>
+
+      <!-- Selector de modo -->
+      <div class="modo-btns">
+        <button class="modo-btn activo" id="modoGastos" onclick="setModo('gastos')">
+          &#127937; Gastos compartidos
+        </button>
+        <button class="modo-btn" id="modoLugar" onclick="setModo('lugar')">
+          &#127869; Bar / Restaurante / Complejo
+        </button>
       </div>
+
+      <!-- Nombre de la reunion -->
+      <input type="text" id="iTit" placeholder="Nombre del evento (ej: Asado del sabado, Cumple...)" maxlength="50" style="margin-bottom:10px">
+
+      <!-- Solo en modo lugar: nombre del establecimiento -->
+      <div id="lugarBox" style="display:none">
+        <div class="lugar-box">
+          <div class="lbl"><span class="lugar-icon">&#127979;</span> Nombre del establecimiento</div>
+          <input type="text" id="iLugar" placeholder="Ej: La Parrilla de Juan, Bar El Solar..." maxlength="60">
+        </div>
+      </div>
+
+      <!-- Personas -->
+      <div style="font-size:13px;color:#4a7a9b;margin-bottom:6px" id="lblPersonas">Personas que participaron</div>
       <div class="row">
         <input type="text" id="iNom" placeholder="Nombre de persona..." maxlength="30">
         <button class="btn bp sm" onclick="addP()">+ Agregar</button>
@@ -258,6 +244,26 @@ input:focus,select:focus,textarea:focus{border-color:#0c4a6e}
 
     <div class="card" id="step2">
       <div class="st"><span class="sb">2</span>Registro de gastos</div>
+
+      <!-- En modo lugar: selector de comensal -->
+      <div id="comensalBox" style="display:none;margin-bottom:10px">
+        <div style="font-size:13px;color:#4a7a9b;margin-bottom:4px">Comensal</div>
+        <select id="selComensal" style="width:100%"></select>
+      </div>
+
+      <!-- En modo gastos: quien pago -->
+      <div id="pagadorBox" style="margin-bottom:8px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <select id="selPag" style="flex:1;min-width:130px"></select>
+          <input type="number" id="iMonto" placeholder="Monto $" min="0" step="1" style="width:110px;flex:none">
+        </div>
+      </div>
+
+      <!-- En modo lugar: solo monto -->
+      <div id="montoLugarBox" style="display:none;margin-bottom:8px">
+        <input type="number" id="iMontoLugar" placeholder="Monto del item $" min="0" step="1">
+      </div>
+
       <div style="margin-bottom:10px">
         <div style="font-size:13px;color:#4a7a9b;margin-bottom:4px">Categoria</div>
         <select id="selCat" style="width:100%"></select>
@@ -267,12 +273,11 @@ input:focus,select:focus,textarea:focus{border-color:#0c4a6e}
         </div>
         <div id="catsExtra" style="margin-top:6px"></div>
       </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
-        <select id="selPag" style="flex:1;min-width:130px"></select>
-        <input type="number" id="iMonto" placeholder="Monto $" min="0" step="1" style="width:110px;flex:none">
-      </div>
-      <textarea id="iNota" placeholder="Nota opcional..." style="font-size:13px;margin-bottom:10px"></textarea>
-      <div style="margin-bottom:10px">
+
+      <textarea id="iNota" placeholder="Descripcion del item (ej: Bife de chorizo, Cerveza 1L...)" style="font-size:13px;margin-bottom:10px"></textarea>
+
+      <!-- Chips de participantes solo en modo gastos -->
+      <div id="chipsBox" style="margin-bottom:10px">
         <div style="font-size:13px;color:#4a7a9b;margin-bottom:5px">Quienes participan?</div>
         <div id="chips" class="pg"></div>
         <div style="margin-top:6px;display:flex;gap:6px">
@@ -280,7 +285,8 @@ input:focus,select:focus,textarea:focus{border-color:#0c4a6e}
           <button class="btn bs sm" onclick="selAll(false)">Ninguno</button>
         </div>
       </div>
-      <button class="btn bp fw" onclick="addG()">+ Agregar gasto</button>
+
+      <button class="btn bp fw" onclick="addG()">+ Agregar item</button>
       <div id="listG" style="margin-top:14px"></div>
       <button class="btn bp fw" style="margin-top:10px" onclick="calcular()">Calcular cuentas &rarr;</button>
     </div>
@@ -289,10 +295,10 @@ input:focus,select:focus,textarea:focus{border-color:#0c4a6e}
       <div class="st"><span class="sb">3</span>Resultado final</div>
       <div id="resBalance"></div>
       <div style="margin-top:12px">
-        <div style="font-size:14px;font-weight:600;color:#0c4a6e;margin-bottom:6px">Transferencias:</div>
+        <div style="font-size:14px;font-weight:600;color:#0c4a6e;margin-bottom:6px" id="lblTrans">Transferencias:</div>
         <div id="resTrans"></div>
       </div>
-      <div class="cw"><canvas id="chartG"></canvas></div>
+      <div class="cw" id="chartBox"><canvas id="chartG"></canvas></div>
     </div>
 
     <div class="card" id="step4">
@@ -315,15 +321,14 @@ input:focus,select:focus,textarea:focus{border-color:#0c4a6e}
     <div class="card">
       <div class="st">Compartir la app</div>
       <div class="qr-box">
-        <img src="https://api.qrserver.com/v1/create-qr-code/?size=130x130&color=0c4a6e&bgcolor=ffffff&data=https%3A%2F%2Fhermanflores77-bit.github.io%2Fcuentas-claras" alt="QR Cuentas Claras">
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=130x130&color=0c4a6e&bgcolor=ffffff&data=https%3A%2F%2Fcuentas-claras.com.ar" alt="QR Cuentas Claras">
         <div class="qr-txt">
-          <p>Escanealo con el celular para instalar <strong>Cuentas Claras</strong> como app. Compartilo con tus amigos.</p>
+          <p>Escanealo con el celular para instalar <strong>Cuentas Claras</strong>. Compartilo con tus amigos.</p>
           <button class="btn bs sm" onclick="dlQR()">Descargar QR</button>
         </div>
       </div>
     </div>
   </div>
-
 </div>
 </div>
 
@@ -342,11 +347,21 @@ var sel = new Set();
 var lSaldo = {};
 var lTrans = [];
 var chartI = null;
+var modo = 'gastos'; // 'gastos' o 'lugar'
 var CATS = ['Carne','Verdura','Bebidas','Gaseosa','Cerveza','Postre','Minuta','Cancha/Turno','Condimentos/Insumos','Varios'];
 var cExtra = [];
 
 function fmt(n) { return Math.round(n).toLocaleString('es-AR'); }
 function getCats() { return CATS.concat(cExtra); }
+
+// ── Modo ──
+function setModo(m) {
+  modo = m;
+  document.getElementById('modoGastos').className = 'modo-btn' + (m === 'gastos' ? ' activo' : '');
+  document.getElementById('modoLugar').className  = 'modo-btn' + (m === 'lugar'  ? ' activo' : '');
+  document.getElementById('lugarBox').style.display   = m === 'lugar'  ? 'block' : 'none';
+  document.getElementById('lblPersonas').textContent  = m === 'lugar'  ? 'Comensales' : 'Personas que participaron';
+}
 
 function renderCatSel() {
   var s = document.getElementById('selCat');
@@ -371,7 +386,6 @@ function renderCatExtra() {
     return '<span class="cc2">' + cat + '<button onclick="delCat(' + i + ')">&times;</button></span>';
   }).join('');
 }
-
 function delCat(i) { cExtra.splice(i, 1); renderCatSel(); renderCatExtra(); }
 
 function swTab(t) {
@@ -385,34 +399,64 @@ function addP() {
   var inp = document.getElementById('iNom');
   var nom = inp.value.trim();
   if (!nom) return;
-  if (personas.map(function(p){return p.toLowerCase();}).indexOf(nom.toLowerCase()) > -1) { alert('Ya esta.'); return; }
+  if (personas.map(function(p){return p.toLowerCase();}).indexOf(nom.toLowerCase()) > -1) { alert('Ya esta en la lista.'); return; }
   personas.push(nom); inp.value = ''; renderP();
 }
-
 document.getElementById('iNom').addEventListener('keydown', function(e) { if (e.key === 'Enter') addP(); });
 document.getElementById('iCat').addEventListener('keydown', function(e) { if (e.key === 'Enter') addCat(); });
 
 function renderP() {
   var c = document.getElementById('listP');
-  if (!personas.length) { c.innerHTML = '<div class="es">Sin personas</div>'; return; }
+  var lbl = modo === 'lugar' ? 'Aun no hay comensales' : 'Sin personas';
+  if (!personas.length) { c.innerHTML = '<div class="es">' + lbl + '</div>'; return; }
   c.innerHTML = personas.map(function(p, i) {
     return '<span class="tag">' + p + '<button onclick="delP(' + i + ')">&times;</button></span>';
   }).join('');
 }
-
 function delP(i) { personas.splice(i, 1); renderP(); }
 
 function goStep2() {
-  if (personas.length < 2) { alert('Agrega al menos 2 personas.'); return; }
+  if (personas.length < 1) { alert(modo === 'lugar' ? 'Agrega al menos 1 comensal.' : 'Agrega al menos 2 personas.'); return; }
+  if (modo === 'gastos' && personas.length < 2) { alert('Agrega al menos 2 personas.'); return; }
+  if (modo === 'lugar') {
+    var lug = document.getElementById('iLugar').value.trim();
+    if (!lug) { alert('Ingresa el nombre del establecimiento.'); return; }
+  }
+
   document.getElementById('step2').style.display = 'block';
   renderCatSel();
-  document.getElementById('selPag').innerHTML = personas.map(function(p) {
-    return '<option value="' + p + '">' + p + ' pago</option>';
-  }).join('');
-  sel = new Set(personas);
-  document.getElementById('chips').innerHTML = personas.map(function(p) {
-    return '<span class="pc sel" id="c_' + CSS.escape(p) + '" onclick="togChip(\'' + p + '\')">' + p + '</span>';
-  }).join('');
+
+  if (modo === 'lugar') {
+    // Modo lugar: mostrar selector de comensal, ocultar pagador y chips
+    document.getElementById('comensalBox').style.display = 'block';
+    document.getElementById('pagadorBox').style.display = 'none';
+    document.getElementById('montoLugarBox').style.display = 'block';
+    document.getElementById('chipsBox').style.display = 'none';
+    document.getElementById('iMonto').style.display = 'none';
+    document.getElementById('selComensal').innerHTML = personas.map(function(p) {
+      return '<option value="' + p + '">' + p + '</option>';
+    }).join('');
+    // Categorias para restaurante
+    if (getCats().indexOf('Entrada') < 0 && cExtra.indexOf('Entrada') < 0) {
+      cExtra = ['Entrada','Plato principal','Postre','Bebida','Otro'];
+      renderCatSel(); renderCatExtra();
+    }
+  } else {
+    // Modo gastos normal
+    document.getElementById('comensalBox').style.display = 'none';
+    document.getElementById('pagadorBox').style.display = 'block';
+    document.getElementById('montoLugarBox').style.display = 'none';
+    document.getElementById('chipsBox').style.display = 'block';
+    document.getElementById('iMonto').style.display = '';
+    document.getElementById('selPag').innerHTML = personas.map(function(p) {
+      return '<option value="' + p + '">' + p + ' pago</option>';
+    }).join('');
+    sel = new Set(personas);
+    document.getElementById('chips').innerHTML = personas.map(function(p) {
+      return '<span class="pc sel" id="c_' + CSS.escape(p) + '" onclick="togChip(\'' + p + '\')">' + p + '</span>';
+    }).join('');
+  }
+
   document.getElementById('step2').scrollIntoView({behavior:'smooth'});
 }
 
@@ -421,7 +465,6 @@ function togChip(p) {
   if (sel.has(p)) { sel.delete(p); el.classList.remove('sel'); }
   else { sel.add(p); el.classList.add('sel'); }
 }
-
 function selAll(v) {
   personas.forEach(function(p) {
     var el = document.getElementById('c_' + CSS.escape(p));
@@ -433,14 +476,23 @@ function selAll(v) {
 function addG() {
   var cs = document.getElementById('selCat');
   var cat = cs.options[cs.selectedIndex].value;
-  var pag = document.getElementById('selPag').value;
-  var monto = parseFloat(document.getElementById('iMonto').value);
   var nota = document.getElementById('iNota').value.trim();
-  var parts = Array.from(sel);
-  if (!monto || monto <= 0) { alert('Monto invalido.'); return; }
-  if (!parts.length) { alert('Selecciona participantes.'); return; }
-  gastos.push({cat:cat, pag:pag, monto:monto, parts:parts, nota:nota});
-  document.getElementById('iMonto').value = '';
+
+  if (modo === 'lugar') {
+    var comensal = document.getElementById('selComensal').value;
+    var monto = parseFloat(document.getElementById('iMontoLugar').value);
+    if (!monto || monto <= 0) { alert('Ingresa un monto valido.'); return; }
+    gastos.push({cat:cat, pag:comensal, monto:monto, parts:[comensal], nota:nota, esLugar:true});
+    document.getElementById('iMontoLugar').value = '';
+  } else {
+    var pag = document.getElementById('selPag').value;
+    var monto2 = parseFloat(document.getElementById('iMonto').value);
+    var parts = Array.from(sel);
+    if (!monto2 || monto2 <= 0) { alert('Ingresa un monto valido.'); return; }
+    if (!parts.length) { alert('Selecciona participantes.'); return; }
+    gastos.push({cat:cat, pag:pag, monto:monto2, parts:parts, nota:nota, esLugar:false});
+    document.getElementById('iMonto').value = '';
+  }
   document.getElementById('iNota').value = '';
   renderG();
 }
@@ -450,7 +502,7 @@ function renderG() {
   if (!gastos.length) { c.innerHTML = ''; return; }
   var total = gastos.reduce(function(s,g){return s+g.monto;}, 0);
   var h = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
-  h += '<span style="font-size:13px;color:#4a7a9b">Gastos (' + gastos.length + ')</span>';
+  h += '<span style="font-size:13px;color:#4a7a9b">Items (' + gastos.length + ')</span>';
   h += '<span class="chip">$' + fmt(total) + '</span></div>';
   gastos.forEach(function(g, i) {
     h += '<div class="gi"><div class="gh">';
@@ -460,10 +512,16 @@ function renderG() {
     h += '<button class="btn bs sm" onclick="editG(' + i + ')" title="Editar">&#9998;</button>';
     h += '<button class="btn bd sm" onclick="delG(' + i + ')">&times;</button>';
     h += '</div></div>';
-    h += '<div style="font-size:13px;color:#1a1a1a">Pago: <strong>' + g.pag + '</strong>';
+    if (g.esLugar) {
+      h += '<div style="font-size:13px;color:#1a1a1a">Comensal: <strong>' + g.pag + '</strong>';
+    } else {
+      h += '<div style="font-size:13px;color:#1a1a1a">Pago: <strong>' + g.pag + '</strong>';
+    }
     if (g.nota) h += ' &middot; <span style="color:#4a7a9b;font-style:italic">' + g.nota + '</span>';
     h += '</div>';
-    h += '<div style="font-size:12px;color:#4a7a9b;margin-top:3px">Participan (' + g.parts.length + '): ' + g.parts.join(', ') + '</div>';
+    if (!g.esLugar) {
+      h += '<div style="font-size:12px;color:#4a7a9b;margin-top:3px">Participan (' + g.parts.length + '): ' + g.parts.join(', ') + '</div>';
+    }
     h += '</div>';
   });
   c.innerHTML = h;
@@ -479,103 +537,165 @@ function editG(i) {
     if (cExtra.indexOf(g.cat) < 0) { cExtra.push(g.cat); renderCatSel(); renderCatExtra(); }
   }
   cs.value = g.cat;
-  document.getElementById('selPag').value = g.pag;
-  document.getElementById('iMonto').value = g.monto;
   document.getElementById('iNota').value = g.nota || '';
-  sel = new Set(g.parts);
-  personas.forEach(function(p) {
-    var el = document.getElementById('c_' + CSS.escape(p));
-    if (el) { g.parts.indexOf(p) > -1 ? el.classList.add('sel') : el.classList.remove('sel'); }
-  });
+  if (g.esLugar) {
+    document.getElementById('selComensal').value = g.pag;
+    document.getElementById('iMontoLugar').value = g.monto;
+  } else {
+    document.getElementById('selPag').value = g.pag;
+    document.getElementById('iMonto').value = g.monto;
+    sel = new Set(g.parts);
+    personas.forEach(function(p) {
+      var el = document.getElementById('c_' + CSS.escape(p));
+      if (el) { g.parts.indexOf(p) > -1 ? el.classList.add('sel') : el.classList.remove('sel'); }
+    });
+  }
   gastos.splice(i, 1); renderG();
-  document.getElementById('iMonto').focus();
+  document.getElementById('iNota').focus();
   document.getElementById('step2').scrollIntoView({behavior:'smooth'});
 }
 
 function calcular() {
-  if (!gastos.length) { alert('Agrega gastos primero.'); return; }
-  var saldo = {};
-  personas.forEach(function(p) { saldo[p] = 0; });
-  gastos.forEach(function(g) {
-    saldo[g.pag] += g.monto;
-    var share = g.monto / g.parts.length;
-    g.parts.forEach(function(p) { saldo[p] -= share; });
-  });
-  lSaldo = {};
-  personas.forEach(function(p) { lSaldo[p] = saldo[p]; });
+  if (!gastos.length) { alert('Agrega items primero.'); return; }
 
-  var bH = '';
-  personas.forEach(function(p) {
-    var v = saldo[p];
-    var cls = v > 0.5 ? 'pos' : v < -0.5 ? 'neg' : 'neu';
-    var lbl = v > 0.5 ? 'a recibir $' + fmt(v) : v < -0.5 ? 'debe pagar $' + fmt(Math.abs(v)) : 'al dia';
-    bH += '<div class="rp"><span style="font-size:15px;font-weight:500">' + p + '</span><span class="ra ' + cls + '">' + lbl + '</span></div>';
-  });
-  document.getElementById('resBalance').innerHTML = bH;
+  var titulo = document.getElementById('iTit').value.trim() || 'Sin titulo';
+  var lugar = modo === 'lugar' ? (document.getElementById('iLugar').value.trim() || 'Establecimiento') : '';
+  var sep = '--------------------------------';
+  var ahora = new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  var total = gastos.reduce(function(s,g){return s+g.monto;}, 0);
 
-  var deu = personas.filter(function(p){return saldo[p]<-0.5;}).map(function(p){return {n:p,v:Math.abs(saldo[p])};}).sort(function(a,b){return b.v-a.v;});
-  var acr = personas.filter(function(p){return saldo[p]>0.5;}).map(function(p){return {n:p,v:saldo[p]};}).sort(function(a,b){return b.v-a.v;});
-  lTrans = []; var di = 0, ai = 0;
-  while (di < deu.length && ai < acr.length) {
-    var d = deu[di], a = acr[ai], pg = Math.min(d.v, a.v);
-    if (pg > 0.5) lTrans.push({de:d.n, a:a.n, monto:pg});
-    d.v -= pg; a.v -= pg;
-    if (d.v < 0.5) di++;
-    if (a.v < 0.5) ai++;
-  }
+  if (modo === 'lugar') {
+    // Modo restaurante: agrupar por comensal
+    var porComensal = {};
+    personas.forEach(function(p) { porComensal[p] = []; });
+    gastos.forEach(function(g) {
+      if (!porComensal[g.pag]) porComensal[g.pag] = [];
+      porComensal[g.pag].push(g);
+    });
 
-  var tH = '';
-  if (!lTrans.length) { tH = '<div class="es">Nadie debe nada!</div>'; }
-  else {
+    lSaldo = {};
+    personas.forEach(function(p) {
+      lSaldo[p] = -(porComensal[p]||[]).reduce(function(s,g){return s+g.monto;}, 0);
+    });
+    lTrans = [];
+    personas.forEach(function(p) {
+      var tot = (porComensal[p]||[]).reduce(function(s,g){return s+g.monto;}, 0);
+      if (tot > 0) lTrans.push({de:p, a:lugar, monto:tot});
+    });
+
+    // Balance
+    var bH = '';
+    personas.forEach(function(p) {
+      var tot = (porComensal[p]||[]).reduce(function(s,g){return s+g.monto;}, 0);
+      var lbl = tot > 0 ? 'debe pagar $' + fmt(tot) + ' a ' + lugar : 'sin consumo';
+      var cls = tot > 0 ? 'neg' : 'neu';
+      bH += '<div class="rp"><span style="font-size:15px;font-weight:500">' + p + '</span><span class="ra ' + cls + '">' + lbl + '</span></div>';
+    });
+    document.getElementById('resBalance').innerHTML = bH;
+    document.getElementById('lblTrans').textContent = 'Pagos al establecimiento:';
+
+    var tH = '';
     lTrans.forEach(function(t) {
       tH += '<div class="tr"><strong>' + t.de + '</strong><span style="color:#4a7a9b;margin:0 4px">&#8594;</span><strong>' + t.a + '</strong><span class="ta">$' + fmt(t.monto) + '</span></div>';
     });
-  }
-  document.getElementById('resTrans').innerHTML = tH;
+    if (!tH) tH = '<div class="es">Sin consumos registrados</div>';
+    document.getElementById('resTrans').innerHTML = tH;
+    document.getElementById('chartBox').style.display = 'none';
 
-  var consumo = {}, pagado = {};
-  personas.forEach(function(p) { consumo[p] = 0; pagado[p] = 0; });
-  gastos.forEach(function(g) {
-    pagado[g.pag] += g.monto;
-    var s = g.monto / g.parts.length;
-    g.parts.forEach(function(p) { consumo[p] += s; });
-  });
-  if (chartI) chartI.destroy();
-  chartI = new Chart(document.getElementById('chartG').getContext('2d'), {
-    type: 'bar',
-    data: {
-      labels: personas,
-      datasets: [
+    // Resumen texto modo lugar
+    var txt = 'CUENTAS CLARAS\n' + titulo.toUpperCase() + '\n';
+    txt += 'Establecimiento: ' + lugar + '\n' + ahora + '\n' + sep + '\n\n';
+    txt += 'COMENSALES: ' + personas.join(', ') + '\n\n';
+    txt += 'DETALLE POR COMENSAL:\n';
+    personas.forEach(function(p) {
+      var items = porComensal[p] || [];
+      if (items.length) {
+        txt += '\n' + p.toUpperCase() + ':\n';
+        items.forEach(function(g) {
+          txt += '  - ' + g.cat + (g.nota ? ' (' + g.nota + ')' : '') + ': $' + fmt(g.monto) + '\n';
+        });
+        var subtot = items.reduce(function(s,g){return s+g.monto;}, 0);
+        txt += '  SUBTOTAL: $' + fmt(subtot) + '\n';
+      } else {
+        txt += '\n' + p.toUpperCase() + ': sin consumo\n';
+      }
+    });
+    txt += '\n' + sep + '\nTOTAL GENERAL: $' + fmt(total) + '\n\n';
+    txt += 'PAGOS A ' + lugar.toUpperCase() + ':\n';
+    lTrans.forEach(function(t) { txt += t.de + ' -> ' + t.a + ': $' + fmt(t.monto) + '\n'; });
+    txt += '\nGenerado con Cuentas Claras';
+    document.getElementById('resText').textContent = txt;
+
+  } else {
+    // Modo gastos normal
+    document.getElementById('chartBox').style.display = 'block';
+    document.getElementById('lblTrans').textContent = 'Transferencias:';
+
+    var saldo = {};
+    personas.forEach(function(p) { saldo[p] = 0; });
+    gastos.forEach(function(g) {
+      saldo[g.pag] += g.monto;
+      var share = g.monto / g.parts.length;
+      g.parts.forEach(function(p) { saldo[p] -= share; });
+    });
+    lSaldo = {};
+    personas.forEach(function(p) { lSaldo[p] = saldo[p]; });
+
+    var bH2 = '';
+    personas.forEach(function(p) {
+      var v = saldo[p];
+      var cls = v > 0.5 ? 'pos' : v < -0.5 ? 'neg' : 'neu';
+      var lbl = v > 0.5 ? 'a recibir $' + fmt(v) : v < -0.5 ? 'debe pagar $' + fmt(Math.abs(v)) : 'al dia';
+      bH2 += '<div class="rp"><span style="font-size:15px;font-weight:500">' + p + '</span><span class="ra ' + cls + '">' + lbl + '</span></div>';
+    });
+    document.getElementById('resBalance').innerHTML = bH2;
+
+    var deu = personas.filter(function(p){return saldo[p]<-0.5;}).map(function(p){return {n:p,v:Math.abs(saldo[p])};}).sort(function(a,b){return b.v-a.v;});
+    var acr = personas.filter(function(p){return saldo[p]>0.5;}).map(function(p){return {n:p,v:saldo[p]};}).sort(function(a,b){return b.v-a.v;});
+    lTrans = []; var di = 0, ai = 0;
+    while (di < deu.length && ai < acr.length) {
+      var d = deu[di], a = acr[ai], pg = Math.min(d.v, a.v);
+      if (pg > 0.5) lTrans.push({de:d.n, a:a.n, monto:pg});
+      d.v -= pg; a.v -= pg;
+      if (d.v < 0.5) di++;
+      if (a.v < 0.5) ai++;
+    }
+
+    var tH2 = '';
+    if (!lTrans.length) { tH2 = '<div class="es">Nadie debe nada!</div>'; }
+    else { lTrans.forEach(function(t) { tH2 += '<div class="tr"><strong>' + t.de + '</strong><span style="color:#4a7a9b;margin:0 4px">&#8594;</span><strong>' + t.a + '</strong><span class="ta">$' + fmt(t.monto) + '</span></div>'; }); }
+    document.getElementById('resTrans').innerHTML = tH2;
+
+    var consumo = {}, pagado = {};
+    personas.forEach(function(p) { consumo[p] = 0; pagado[p] = 0; });
+    gastos.forEach(function(g) {
+      pagado[g.pag] += g.monto;
+      var s = g.monto / g.parts.length;
+      g.parts.forEach(function(p) { consumo[p] += s; });
+    });
+    if (chartI) chartI.destroy();
+    chartI = new Chart(document.getElementById('chartG').getContext('2d'), {
+      type: 'bar',
+      data: {labels: personas, datasets: [
         {label:'Consumio', data:personas.map(function(p){return Math.round(consumo[p]);}), backgroundColor:'#378ADD', borderRadius:5, borderSkipped:false},
         {label:'Pago',     data:personas.map(function(p){return Math.round(pagado[p]);}),  backgroundColor:'#0c4a6e', borderRadius:5, borderSkipped:false}
-      ]
-    },
-    options: {
-      responsive:true, maintainAspectRatio:false,
-      plugins:{legend:{labels:{font:{size:12}}}},
-      scales:{
-        y:{ticks:{callback:function(v){return '$'+Math.round(v).toLocaleString('es-AR');},font:{size:10}}},
-        x:{ticks:{font:{size:12}},grid:{display:false}}
-      }
-    }
-  });
+      ]},
+      options: {responsive:true, maintainAspectRatio:false,
+        plugins:{legend:{labels:{font:{size:12}}}},
+        scales:{y:{ticks:{callback:function(v){return '$'+Math.round(v).toLocaleString('es-AR');},font:{size:10}}}, x:{ticks:{font:{size:12}},grid:{display:false}}}}
+    });
 
-  var titulo = document.getElementById('iTit').value.trim() || 'Sin titulo';
-  var sep = '--------------------------------';
-  var ahora = new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
-  var txt = 'CUENTAS CLARAS\n' + titulo.toUpperCase() + '\n' + ahora + '\n' + sep + '\n\nPARTICIPANTES: ' + personas.join(', ') + '\n\nDETALLE DE GASTOS:\n';
-  gastos.forEach(function(g) { txt += '- ' + g.cat + ': $' + fmt(g.monto) + ' | pago: ' + g.pag + (g.nota ? ' (' + g.nota + ')' : '') + ' | participan: ' + g.parts.join(', ') + '\n'; });
-  var total = gastos.reduce(function(s,g){return s+g.monto;}, 0);
-  txt += '\nTOTAL: $' + fmt(total) + '\n' + sep + '\n\nBALANCE:\n';
-  personas.forEach(function(p) {
-    var v = saldo[p];
-    txt += p + ': ' + (v > 0.5 ? 'a recibir $' + fmt(v) : v < -0.5 ? 'debe pagar $' + fmt(Math.abs(v)) : 'al dia') + '\n';
-  });
-  txt += '\nTRANSFERENCIAS:\n';
-  if (!lTrans.length) { txt += 'Nadie debe nada.\n'; }
-  else { lTrans.forEach(function(t) { txt += t.de + ' -> ' + t.a + ': $' + fmt(t.monto) + '\n'; }); }
-  txt += '\nGenerado con Cuentas Claras';
-  document.getElementById('resText').textContent = txt;
+    var txt2 = 'CUENTAS CLARAS\n' + titulo.toUpperCase() + '\n' + ahora + '\n' + sep + '\n\nPARTICIPANTES: ' + personas.join(', ') + '\n\nDETALLE DE GASTOS:\n';
+    gastos.forEach(function(g) { txt2 += '- ' + g.cat + ': $' + fmt(g.monto) + ' | pago: ' + g.pag + (g.nota ? ' (' + g.nota + ')' : '') + ' | participan: ' + g.parts.join(', ') + '\n'; });
+    txt2 += '\nTOTAL: $' + fmt(total) + '\n' + sep + '\n\nBALANCE:\n';
+    personas.forEach(function(p) { var v = saldo[p]; txt2 += p + ': ' + (v > 0.5 ? 'a recibir $' + fmt(v) : v < -0.5 ? 'debe pagar $' + fmt(Math.abs(v)) : 'al dia') + '\n'; });
+    txt2 += '\nTRANSFERENCIAS:\n';
+    if (!lTrans.length) { txt2 += 'Nadie debe nada.\n'; }
+    else { lTrans.forEach(function(t) { txt2 += t.de + ' -> ' + t.a + ': $' + fmt(t.monto) + '\n'; }); }
+    txt2 += '\nGenerado con Cuentas Claras';
+    document.getElementById('resText').textContent = txt2;
+  }
+
   document.getElementById('step3').style.display = 'block';
   document.getElementById('step4').style.display = 'block';
   document.getElementById('step3').scrollIntoView({behavior:'smooth'});
@@ -583,13 +703,12 @@ function calcular() {
 
 function guardar() {
   var titulo = document.getElementById('iTit').value.trim() || 'Sin titulo';
+  var lugar = modo === 'lugar' ? (document.getElementById('iLugar').value.trim() || 'Establecimiento') : '';
   window.guardarCuenta({
-    titulo: titulo,
+    titulo: titulo, modo: modo, lugar: lugar,
     resumen: document.getElementById('resText').textContent,
-    personas: personas.slice(),
-    gastos: gastos.slice(),
-    saldo: lSaldo,
-    transfers: lTrans
+    personas: personas.slice(), gastos: gastos.slice(),
+    saldo: lSaldo, transfers: lTrans
   });
 }
 
@@ -608,19 +727,20 @@ function genPDF() {
 }
 
 function dlQR() {
-  var url = 'https://api.qrserver.com/v1/create-qr-code/?size=400x400&color=0c4a6e&bgcolor=ffffff&data=' + encodeURIComponent('https://hermanflores77-bit.github.io/cuentas-claras');
-  var a = document.createElement('a');
-  a.download = 'qr-cuentas-claras.png';
-  a.href = url;
-  a.click();
+  var url = 'https://api.qrserver.com/v1/create-qr-code/?size=400x400&color=0c4a6e&bgcolor=ffffff&data=' + encodeURIComponent('https://cuentas-claras.com.ar');
+  var a = document.createElement('a'); a.download = 'qr-cuentas-claras.png'; a.href = url; a.click();
 }
 
 function reset() {
   personas = []; gastos = []; sel = new Set(); lSaldo = {}; lTrans = []; cExtra = [];
+  modo = 'gastos';
+  setModo('gastos');
   document.getElementById('iTit').value = '';
+  document.getElementById('iLugar').value = '';
   renderP();
   document.getElementById('listG').innerHTML = '';
   document.getElementById('catsExtra').innerHTML = '';
+  document.getElementById('chartBox').style.display = 'block';
   if (chartI) { chartI.destroy(); chartI = null; }
   ['step2','step3','step4'].forEach(function(s) { document.getElementById(s).style.display = 'none'; });
   window.scrollTo({top:0, behavior:'smooth'});
